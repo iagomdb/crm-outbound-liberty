@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getCampaignBySlug, getFunnelMetrics, getQueue } from "@/db/queries";
+import { getCampaignBySlug, getFunnelMetrics, getQueue, getTriagemCount } from "@/db/queries";
 import { KanbanBoard, type BoardColumn, type BoardItem } from "@/components/KanbanBoard";
 import { moveTarget, archiveTarget } from "./actions";
 import { goldenHourLabel } from "@/core/golden-hours";
@@ -39,7 +39,11 @@ export default async function CampaignBoard({ params }: { params: Promise<{ slug
   const campaign = await getCampaignBySlug(slug);
   if (!campaign) notFound();
 
-  const [items, metrics] = await Promise.all([getQueue(campaign.id), getFunnelMetrics(campaign.id)]);
+  const [items, metrics, triagemPendente] = await Promise.all([
+    getQueue(campaign.id),
+    getFunnelMetrics(campaign.id),
+    getTriagemCount(campaign.id),
+  ]);
   const r = funnelRates(metrics);
   const diags = diagnose(metrics);
   const gh = GH_UI[goldenHourLabel()];
@@ -75,6 +79,22 @@ export default async function CampaignBoard({ params }: { params: Promise<{ slug
           <p className="text-sm text-zinc-500">Kanban · {items.length} ativos · arraste os cards entre as colunas</p>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            href={`/campaigns/${slug}/triagem`}
+            className={`rounded-md border px-3 py-1 text-xs font-medium ${
+              triagemPendente > 0
+                ? "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                : "border-zinc-300 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+            }`}
+          >
+            triagem ICP{triagemPendente > 0 ? ` · ${triagemPendente}` : ""}
+          </Link>
+          <Link
+            href={`/campaigns/${slug}/fora-do-ciclo`}
+            className="rounded-md border border-zinc-300 px-3 py-1 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+          >
+            fora do ciclo
+          </Link>
           <Link
             href={`/companies/new?campaign=${slug}`}
             className="rounded-md border border-zinc-300 px-3 py-1 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"

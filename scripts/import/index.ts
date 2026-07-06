@@ -202,7 +202,7 @@ async function main() {
     `\ncampanha: ${camp.name}` +
       `\nlidas: ${stats.read} | novas: ${stats.inserted} | atualizadas: ${stats.updated} | ` +
       `puladas: ${stats.skipped} | alvos criados: ${stats.targetsCreated}` +
-      (dryRun ? "\n(dry-run: nada gravado)" : ""),
+      (dryRun ? "\n(dry-run: nada gravado)" : `\n\ntriar agora → http://localhost:3000/campaigns/${campaignSlug}/triagem`),
   );
   if (skips.length) {
     console.log("puladas (sem CNPJ válido):");

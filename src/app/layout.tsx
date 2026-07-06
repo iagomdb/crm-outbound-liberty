@@ -21,6 +21,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <Link href="/" className="text-sm font-semibold tracking-tight">
                 CRM <span className="text-zinc-400">Outbound</span>
               </Link>
+              <Link href="/fila" className="text-sm font-medium text-zinc-700 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-100">
+                Fila do Dia
+              </Link>
               <Link href="/agenda" className="text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100">
                 Agenda
               </Link>

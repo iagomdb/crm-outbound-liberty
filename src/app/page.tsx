@@ -1,14 +1,35 @@
 import Link from "next/link";
-import { getCampaignsWithStats } from "@/db/queries";
+import { getCampaignsWithStats, getDailyQueue, getTodayStats } from "@/db/queries";
 import { STAGE_LABELS, STAGE_ORDER, type Stage } from "@/core/pipeline";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const camps = await getCampaignsWithStats();
+  const [camps, stats, q] = await Promise.all([getCampaignsWithStats(), getTodayStats(), getDailyQueue()]);
+  const naFila = q.atrasadas.length + q.hoje.length + q.estadoZero.length;
 
   return (
     <div className="flex flex-col gap-6">
+      {/* o dia a dia acontece na fila — a home só aponta pra lá */}
+      <Link
+        href="/fila"
+        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white p-5 transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700"
+      >
+        <div>
+          <h2 className="font-semibold">▶ Fila do Dia</h2>
+          <p className="text-sm text-zinc-500">
+            {naFila > 0
+              ? `${q.atrasadas.length} atrasadas · ${q.hoje.length} hoje · ${q.estadoZero.length} estado zero`
+              : "fila vazia"}
+          </p>
+        </div>
+        <div className="text-sm tabular-nums text-zinc-500">
+          hoje: <strong className="text-zinc-900 dark:text-zinc-100">{stats.discadas}</strong> discadas ·{" "}
+          <strong className="text-zinc-900 dark:text-zinc-100">{stats.conversas}</strong> conversas ·{" "}
+          <strong className="text-zinc-900 dark:text-zinc-100">{stats.reunioes}</strong> reuniões
+        </div>
+      </Link>
+
       <h1 className="text-xl font-semibold">Campanhas</h1>
 
       {camps.length === 0 && (

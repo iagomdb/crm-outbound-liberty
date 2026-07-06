@@ -1,7 +1,8 @@
-import { asc, count, desc, eq, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNull, lt, not, notInArray, or, sql } from "drizzle-orm";
 import { getDb } from "./index";
-import { activities, campaigns, meetings, targets } from "./schema";
+import { activities, campaigns, companies, meetings, targets } from "./schema";
 import { type Stage, TERMINAL_STAGES } from "@/core/pipeline";
+import { CYCLE_END_STAGES } from "@/core/tasks";
 import type { FunnelCounts } from "@/core/funnel";
 
 export type CampaignStats = {
@@ -134,6 +135,187 @@ export async function getFunnelMetrics(campaignId: string): Promise<FunnelCounts
   };
 }
 
+// ---------------------------------------------------------------- Fila do Dia (roadmap Fase 3)
+
+const filaRow = {
+  id: targets.id,
+  stage: targets.stage,
+  attempts: targets.attempts,
+  stageChangedAt: targets.stageChangedAt,
+  nextActionAt: targets.nextActionAt,
+  nextActionPretext: targets.nextActionPretext,
+  priority: targets.priority,
+  campaignId: targets.campaignId,
+  campaignName: campaigns.name,
+  razaoSocial: companies.razaoSocial,
+  nomeFantasia: companies.nomeFantasia,
+  telefones: companies.telefones,
+  uf: companies.uf,
+  municipio: companies.municipio,
+};
+
+const activeTarget = and(isNull(targets.archivedAt), notInArray(targets.stage, CYCLE_END_STAGES));
+
+/**
+ * A Fila do Dia: atrasadas → hoje → estado zero (novos triados como fit, a
+ * "task implícita" da primeira ligação). Desce de cima pra baixo e liga.
+ */
+export async function getDailyQueue(now = new Date()) {
+  const db = getDb();
+  const startToday = new Date(now);
+  startToday.setHours(0, 0, 0, 0);
+  const startTomorrow = new Date(startToday);
+  startTomorrow.setDate(startTomorrow.getDate() + 1);
+
+  const due = await db
+    .select(filaRow)
+    .from(targets)
+    .innerJoin(companies, eq(targets.companyId, companies.id))
+    .innerJoin(campaigns, eq(targets.campaignId, campaigns.id))
+    .where(and(isNull(targets.archivedAt), lt(targets.nextActionAt, startTomorrow)))
+    .orderBy(asc(targets.nextActionAt))
+    .limit(200);
+
+  const estadoZero = await db
+    .select(filaRow)
+    .from(targets)
+    .innerJoin(companies, eq(targets.companyId, companies.id))
+    .innerJoin(campaigns, eq(targets.campaignId, campaigns.id))
+    .where(
+      and(
+        isNull(targets.archivedAt),
+        eq(targets.stage, "novo"),
+        eq(targets.attempts, 0),
+        isNull(targets.nextActionAt),
+        eq(companies.icpFit, true),
+      ),
+    )
+    .orderBy(desc(targets.priority), asc(targets.createdAt))
+    .limit(200);
+
+  return {
+    atrasadas: due.filter((t) => t.nextActionAt! < startToday),
+    hoje: due.filter((t) => t.nextActionAt! >= startToday),
+    estadoZero,
+  };
+}
+
+/** Próximo alvo da fila (modo discagem: zero cliques entre ligações). */
+export async function getNextInQueue(excludeTargetId: string): Promise<string | null> {
+  const q = await getDailyQueue();
+  const next = [...q.atrasadas, ...q.hoje, ...q.estadoZero].find((t) => t.id !== excludeTargetId);
+  return next?.id ?? null;
+}
+
+/**
+ * Varredura de órfãos (roadmap Fase 4): alvo ativo SEM task e SEM estágio
+ * terminal — não deveria existir depois da regra de ouro. Estado zero
+ * (novo, 0 tentativas) não é órfão: ainda nem entrou no ciclo.
+ */
+export async function getOrphans() {
+  const db = getDb();
+  return db
+    .select(filaRow)
+    .from(targets)
+    .innerJoin(companies, eq(targets.companyId, companies.id))
+    .innerJoin(campaigns, eq(targets.campaignId, campaigns.id))
+    .where(
+      and(
+        activeTarget,
+        isNull(targets.nextActionAt),
+        not(and(eq(targets.stage, "novo"), eq(targets.attempts, 0))!),
+      ),
+    )
+    .limit(50);
+}
+
+/** Medição do dia (roadmap Fase 5): discadas / conversas / reuniões de HOJE. */
+export async function getTodayStats() {
+  const db = getDb();
+  const today = sql`date_trunc('day', now())`;
+  const [a] = await db
+    .select({
+      discadas: sql<number>`(count(*) filter (where ${activities.type} in ('ligacao','voicemail')))::int`,
+      conversas: sql<number>`(count(*) filter (where ${activities.reachedHuman}))::int`,
+    })
+    .from(activities)
+    .where(sql`${activities.occurredAt} >= ${today}`);
+  const [m] = await db
+    .select({ reunioes: sql<number>`(count(*))::int` })
+    .from(meetings)
+    .where(sql`${meetings.createdAt} >= ${today}`);
+  return { discadas: a?.discadas ?? 0, conversas: a?.conversas ?? 0, reunioes: m?.reunioes ?? 0 };
+}
+
+// ---------------------------------------------------------------- triagem de ICP (roadmap Fase 1)
+
+/** Alvos da campanha cuja empresa ainda não foi triada (icpFit null). */
+export async function getTriagemQueue(campaignId: string) {
+  const db = getDb();
+  return db
+    .select({
+      targetId: targets.id,
+      companyId: companies.id,
+      razaoSocial: companies.razaoSocial,
+      nomeFantasia: companies.nomeFantasia,
+      cnpj: companies.cnpj,
+      cnaePrincipal: companies.cnaePrincipal,
+      porte: companies.porte,
+      capitalSocial: companies.capitalSocial,
+      uf: companies.uf,
+      municipio: companies.municipio,
+    })
+    .from(targets)
+    .innerJoin(companies, eq(targets.companyId, companies.id))
+    .where(and(eq(targets.campaignId, campaignId), isNull(targets.archivedAt), isNull(companies.icpFit)))
+    .orderBy(asc(companies.razaoSocial))
+    .limit(500);
+}
+
+export async function getTriagemCount(campaignId: string): Promise<number> {
+  const db = getDb();
+  const [r] = await db
+    .select({ n: count() })
+    .from(targets)
+    .innerJoin(companies, eq(targets.companyId, companies.id))
+    .where(and(eq(targets.campaignId, campaignId), isNull(targets.archivedAt), isNull(companies.icpFit)));
+  return r?.n ?? 0;
+}
+
+// ---------------------------------------------------------------- fora do ciclo (roadmap Fase 4)
+
+/** Fins de ciclo da campanha: arquivados + estágios terminais, com motivo e data. */
+export async function getForaDoCiclo(campaignId: string) {
+  const db = getDb();
+  return db
+    .select({
+      id: targets.id,
+      stage: targets.stage,
+      attempts: targets.attempts,
+      archivedAt: targets.archivedAt,
+      archiveReason: targets.archiveReason,
+      lostReason: targets.lostReason,
+      nextActionAt: targets.nextActionAt,
+      nextActionPretext: targets.nextActionPretext,
+      stageChangedAt: targets.stageChangedAt,
+      razaoSocial: companies.razaoSocial,
+      nomeFantasia: companies.nomeFantasia,
+    })
+    .from(targets)
+    .innerJoin(companies, eq(targets.companyId, companies.id))
+    .where(
+      and(
+        eq(targets.campaignId, campaignId),
+        or(sql`${targets.archivedAt} is not null`, notInArray(targets.stage, ACTIVE_ONLY)),
+      ),
+    )
+    .orderBy(desc(targets.updatedAt))
+    .limit(500);
+}
+
+const ACTIVE_ONLY: Stage[] = ["novo", "tentando", "conversa", "qualificado", "reuniao_agendada"];
+
+export type FilaItem = Awaited<ReturnType<typeof getOrphans>>[number];
 export type QueueItem = Awaited<ReturnType<typeof getQueue>>[number];
 export type TargetDetail = NonNullable<Awaited<ReturnType<typeof getTargetDetail>>>;
 export type { Stage };
