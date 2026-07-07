@@ -1,8 +1,7 @@
 # CRM Outbound — Liberty
 
 CRM próprio para prospecção outbound. Primeira campanha: **recuperação de crédito**
-(SDR agendando reuniões para o escritório). O modelo de dados encoda o playbook em
-[`docs/cold-call-recuperacao-credito-v2.md`](docs/cold-call-recuperacao-credito-v2.md) —
+(SDR agendando reuniões para o escritório). O modelo de dados encoda o playbook em)
 conta conversa-com-humano (não discada), rastreia onde a ligação travou, cadência com
 pretexto novo, e o funil por razões.
 
