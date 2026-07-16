@@ -13,7 +13,9 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx scripts/seed.ts",
     "db:reset": "tsx scripts/reset-data.ts",
+    "auth:create-user": "tsx scripts/create-user.ts",
     "import": "tsx scripts/import/index.ts",
+    "import:google": "tsx scripts/import/google.ts",
     "import:fixture": "tsx scripts/import/make-fixture.ts"
   },
   "dependencies": {
@@ -21,6 +23,7 @@
     "drizzle-orm": "^0.45.2",
     "exceljs": "^4.4.0",
     "next": "16.2.10",
+    "nodemailer": "^9.0.3",
     "postgres": "^3.4.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -29,6 +32,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^24",
+    "@types/nodemailer": "^8.0.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^17.4.2",

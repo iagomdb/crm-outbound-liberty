@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { requireUser } from "@/auth/dal";
 import { getTargetDetail } from "@/db/queries";
 import { StageBadge } from "@/components/StageBadge";
 import { CallLogForm } from "@/components/CallLogForm";
+import { ActivityHistory } from "@/components/ActivityHistory";
+import { MaskedInput } from "@/components/MaskedInput";
 import { logCall } from "./actions";
 import {
   archiveTargetDetail,
@@ -57,7 +60,7 @@ function ContactFields({ c }: { c?: ContactRow }) {
         ))}
       </select>
       <input name="cargo" defaultValue={c?.cargo ?? ""} placeholder="cargo" className={inp} />
-      <input name="telefoneDireto" defaultValue={c?.telefoneDireto ?? ""} placeholder="telefone direto" className={inp} />
+      <MaskedInput mask="phone" name="telefoneDireto" defaultValue={c?.telefoneDireto ?? ""} placeholder="telefone direto" className={inp} />
       <input name="email" defaultValue={c?.email ?? ""} placeholder="e-mail" className={inp} />
       <input name="melhorHorario" defaultValue={c?.melhorHorario ?? ""} placeholder="melhor horário" className={inp} />
       <label className="col-span-2 flex items-center gap-1.5 text-xs">
@@ -69,6 +72,7 @@ function ContactFields({ c }: { c?: ContactRow }) {
 }
 
 export default async function TargetDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireUser();
   const { id } = await params;
   const t = await getTargetDetail(id);
   if (!t) notFound();
@@ -158,13 +162,13 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
               <form action={updateCompany.bind(null, co.id)} className="mt-3 grid grid-cols-2 gap-2">
                 <input name="razaoSocial" defaultValue={co.razaoSocial} placeholder="razão social" className={inp} />
                 <input name="nomeFantasia" defaultValue={co.nomeFantasia ?? ""} placeholder="nome fantasia" className={inp} />
-                <input name="tel1" defaultValue={co.telefones?.[0] ?? ""} placeholder="telefone 1" className={inp} />
-                <input name="tel2" defaultValue={co.telefones?.[1] ?? ""} placeholder="telefone 2" className={inp} />
+                <MaskedInput mask="phone" name="tel1" defaultValue={co.telefones?.[0] ?? ""} placeholder="telefone 1" className={inp} />
+                <MaskedInput mask="phone" name="tel2" defaultValue={co.telefones?.[1] ?? ""} placeholder="telefone 2" className={inp} />
                 <input name="email1" defaultValue={co.emails?.[0] ?? ""} placeholder="e-mail 1" className={inp} />
                 <input name="email2" defaultValue={co.emails?.[1] ?? ""} placeholder="e-mail 2" className={inp} />
                 <input name="cnaePrincipal" defaultValue={co.cnaePrincipal ?? ""} placeholder="CNAE" className={`${inp} col-span-2`} />
                 <input name="porte" defaultValue={co.porte ?? ""} placeholder="porte" className={inp} />
-                <input name="uf" defaultValue={co.uf ?? ""} placeholder="UF" maxLength={2} className={inp} />
+                <MaskedInput mask="uf" name="uf" defaultValue={co.uf ?? ""} maxLength={2} className={inp} />
                 <input name="municipio" defaultValue={co.municipio ?? ""} placeholder="município" className={inp} />
                 <textarea name="notes" defaultValue={co.notes ?? ""} placeholder="observações" rows={2} className={`${inp} col-span-2`} />
                 <button className={`${btn} col-span-2 justify-self-start`}>Salvar empresa</button>
@@ -264,38 +268,10 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
             )}
           </section>
 
-          {/* histórico */}
+          {/* histórico: uma linha por ligação, clique expande o registro completo */}
           <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
             <h2 className="mb-3 text-sm font-semibold">Histórico ({t.activities.length})</h2>
-            {t.activities.length === 0 ? (
-              <p className="text-sm text-zinc-500">Sem ligações registradas.</p>
-            ) : (
-              <ul className="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-900">
-                {t.activities.map((a) => (
-                  <li key={a.id} className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0">
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="text-zinc-400">{fmtDateTime(a.occurredAt)}</span>
-                      {a.reachedHuman ? (
-                        <span className="rounded bg-sky-100 px-1.5 py-0.5 font-medium text-sky-700 dark:bg-sky-950 dark:text-sky-300">conversa</span>
-                      ) : (
-                        <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-zinc-500 dark:bg-zinc-800">discada</span>
-                      )}
-                      {a.objectiveHit !== "nenhum" && (
-                        <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                          {OBJECTIVE_LABELS[a.objectiveHit]}
-                        </span>
-                      )}
-                      {a.objection !== "nenhuma" && (
-                        <span className="text-zinc-400">obj: {OBJECTION_LABELS[a.objection] ?? a.objection}</span>
-                      )}
-                    </div>
-                    {a.outcome && <p className="text-sm">{a.outcome}</p>}
-                    {a.stalledAt && <p className="text-xs text-zinc-500">travou em: “{a.stalledAt}”</p>}
-                    {a.nextActionPretext && <p className="text-xs text-zinc-500">próximo pretexto: {a.nextActionPretext}</p>}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <ActivityHistory activities={t.activities} />
           </section>
         </div>
 

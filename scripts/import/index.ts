@@ -185,14 +185,15 @@ async function main() {
           updatedAt: new Date(),
         },
       })
-      .returning({ id: companies.id, inserted: sql<boolean>`(xmax = 0)` });
+      .returning({ id: companies.id, inserted: sql<boolean>`(xmax = 0)`, icpFit: companies.icpFit });
 
     if (c.inserted) stats.inserted++;
     else stats.updated++;
 
+    // empresa já triada como fit (em import anterior/outra campanha) pula a triagem
     const t = await db
       .insert(targets)
-      .values({ campaignId: camp.id, companyId: c.id })
+      .values({ campaignId: camp.id, companyId: c.id, ...(c.icpFit ? { stage: "fit" as const } : {}) })
       .onConflictDoNothing({ target: [targets.campaignId, targets.companyId] })
       .returning({ id: targets.id });
     if (t.length) stats.targetsCreated++;
@@ -202,7 +203,9 @@ async function main() {
     `\ncampanha: ${camp.name}` +
       `\nlidas: ${stats.read} | novas: ${stats.inserted} | atualizadas: ${stats.updated} | ` +
       `puladas: ${stats.skipped} | alvos criados: ${stats.targetsCreated}` +
-      (dryRun ? "\n(dry-run: nada gravado)" : `\n\ntriar agora → http://localhost:3000/campaigns/${campaignSlug}/triagem`),
+      (dryRun
+        ? "\n(dry-run: nada gravado)"
+        : `\n\ntriar agora → http://localhost:${process.env.WEB_PORT ?? 3000}/campaigns/${campaignSlug}/triagem`),
   );
   if (skips.length) {
     console.log("puladas (sem CNPJ válido):");

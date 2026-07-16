@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { requireUser } from "@/auth/dal";
 import { getCampaignBySlug, getFunnelMetrics, getQueue, getTriagemCount } from "@/db/queries";
 import { KanbanBoard, type BoardColumn, type BoardItem } from "@/components/KanbanBoard";
 import { moveTarget, archiveTarget } from "./actions";
@@ -35,6 +36,7 @@ function Arrow({ rate }: { rate: string }) {
 }
 
 export default async function CampaignBoard({ params }: { params: Promise<{ slug: string }> }) {
+  await requireUser();
   const { slug } = await params;
   const campaign = await getCampaignBySlug(slug);
   if (!campaign) notFound();
@@ -76,7 +78,9 @@ export default async function CampaignBoard({ params }: { params: Promise<{ slug
             ← campanhas
           </Link>
           <h1 className="text-xl font-semibold">{campaign.name}</h1>
-          <p className="text-sm text-zinc-500">Kanban · {items.length} ativos · arraste os cards entre as colunas</p>
+          <p className="text-sm text-zinc-500">
+            Kanban · {items.length} ativos · arraste os cards ou use &quot;mover ➜&quot; direto no card
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <Link
@@ -96,10 +100,22 @@ export default async function CampaignBoard({ params }: { params: Promise<{ slug
             fora do ciclo
           </Link>
           <Link
+            href={`/campaigns/${slug}/aprendizado`}
+            className="rounded-md border border-zinc-300 px-3 py-1 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+          >
+            aprendizado
+          </Link>
+          <Link
             href={`/companies/new?campaign=${slug}`}
             className="rounded-md border border-zinc-300 px-3 py-1 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
           >
             + empresa
+          </Link>
+          <Link
+            href={`/campaigns/${slug}/editar`}
+            className="rounded-md border border-zinc-300 px-3 py-1 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+          >
+            editar
           </Link>
           <span className={`rounded-full px-3 py-1 text-xs font-medium ${gh.cls}`}>{gh.txt}</span>
         </div>

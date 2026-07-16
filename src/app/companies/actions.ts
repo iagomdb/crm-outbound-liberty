@@ -3,15 +3,18 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
+import { requireUser } from "@/auth/dal";
 import { getDb } from "@/db";
 import { campaigns, companies, targets } from "@/db/schema";
 
 const s = (v: FormDataEntryValue | null) => (typeof v === "string" ? v.trim() : "");
+const digits = (v: FormDataEntryValue | null) => s(v).replace(/\D/g, "");
 
 /** Cria (ou atualiza) uma empresa manualmente e, opcionalmente, cria o alvo na campanha. */
 export async function createCompany(fd: FormData) {
+  await requireUser();
   const db = getDb();
-  const cnpj = s(fd.get("cnpj")).replace(/\D/g, "");
+  const cnpj = digits(fd.get("cnpj"));
   const razaoSocial = s(fd.get("razaoSocial"));
   if (!razaoSocial) throw new Error("razão social obrigatória");
   if (cnpj.length !== 14) throw new Error("CNPJ inválido (14 dígitos)");
@@ -22,11 +25,11 @@ export async function createCompany(fd: FormData) {
       cnpj,
       razaoSocial,
       nomeFantasia: s(fd.get("nomeFantasia")) || null,
-      telefones: [s(fd.get("tel1")), s(fd.get("tel2"))].filter(Boolean),
+      telefones: [digits(fd.get("tel1")), digits(fd.get("tel2"))].filter(Boolean),
       emails: [s(fd.get("email1")), s(fd.get("email2"))].filter(Boolean),
       cnaePrincipal: s(fd.get("cnaePrincipal")) || null,
       porte: s(fd.get("porte")) || null,
-      uf: s(fd.get("uf")).slice(0, 2) || null,
+      uf: s(fd.get("uf")).slice(0, 2).toUpperCase() || null,
       municipio: s(fd.get("municipio")) || null,
       source: "manual",
     })

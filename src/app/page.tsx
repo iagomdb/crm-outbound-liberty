@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { requireUser } from "@/auth/dal";
 import { getCampaignsWithStats, getDailyQueue, getTodayStats } from "@/db/queries";
 import { STAGE_LABELS, STAGE_ORDER, type Stage } from "@/core/pipeline";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
+  await requireUser();
   const [camps, stats, q] = await Promise.all([getCampaignsWithStats(), getTodayStats(), getDailyQueue()]);
   const naFila = q.atrasadas.length + q.hoje.length + q.estadoZero.length;
 
@@ -30,7 +32,15 @@ export default async function Home() {
         </div>
       </Link>
 
-      <h1 className="text-xl font-semibold">Campanhas</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Campanhas</h1>
+        <Link
+          href="/campaigns/new"
+          className="rounded-md border border-zinc-300 px-3 py-1 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+        >
+          + nova carteira
+        </Link>
+      </div>
 
       {camps.length === 0 && (
         <p className="text-sm text-zinc-500">

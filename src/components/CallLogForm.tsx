@@ -47,6 +47,10 @@ export function CallLogForm({
   submitLabel?: string;
 }) {
   const [stage, setStage] = useState("");
+  // fim de ciclo ⇒ o servidor LIMPA a task (regra de ouro) — esconder os campos
+  // de próxima ação pra tela não sugerir que um retorno será agendado
+  const isCycleEnd = stage === "ganho" || stage === "perdido" || stage === "handoff";
+  const isNaoAgora = stage === "nao_agora";
   return (
     <form action={action} className="flex flex-col gap-3">
       <label className="flex items-center gap-2 rounded-md bg-zinc-100 px-3 py-2 dark:bg-zinc-800">
@@ -123,25 +127,6 @@ export function CallLogForm({
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div>
-          <div className={label}>Próxima ação (quando)</div>
-          <input type="datetime-local" name="nextActionAt" defaultValue={defaultNextActionAt} className={field} />
-          <p className="mt-0.5 text-[10px] text-zinc-400">vazio ⇒ +2 dias úteis (regra de ouro)</p>
-        </div>
-        <div>
-          <div className={label}>Tipo</div>
-          <select name="type" className={field} defaultValue="ligacao">
-            {typeOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="col-span-2">
-          <div className={label}>Pretexto do próximo contato (motivo novo — cadência teimosa)</div>
-          <input name="nextActionPretext" className={field} placeholder="ex: mandar resumo de 1 página" />
-        </div>
         <div className="col-span-2">
           <div className={label}>Estágio (deixe automático, ou force)</div>
           <select name="stage" className={field} value={stage} onChange={(e) => setStage(e.target.value)}>
@@ -153,16 +138,56 @@ export function CallLogForm({
             ))}
           </select>
         </div>
+        {!isCycleEnd && (
+          <>
+            <div>
+              <div className={label}>Próxima ação (quando)</div>
+              <input
+                key={isNaoAgora ? "reentrada" : "cadencia"}
+                type="datetime-local"
+                name="nextActionAt"
+                defaultValue={isNaoAgora ? undefined : defaultNextActionAt}
+                className={field}
+              />
+              <p className="mt-0.5 text-[10px] text-zinc-400">
+                {isNaoAgora ? "vazio ⇒ retoma em +90 dias" : "vazio ⇒ +2 dias úteis (regra de ouro)"}
+              </p>
+            </div>
+            <div>
+              <div className={label}>Tipo</div>
+              <select name="type" className={field} defaultValue="ligacao">
+                {typeOptions.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="col-span-2">
+              <div className={label}>Pretexto do próximo contato (motivo novo — cadência teimosa)</div>
+              <input
+                name="nextActionPretext"
+                className={field}
+                placeholder={isNaoAgora ? "vazio ⇒ “retomar — disse só ano que vem”" : "ex: mandar resumo de 1 página"}
+              />
+            </div>
+          </>
+        )}
+        {isCycleEnd && (
+          <p className="col-span-2 rounded-md bg-zinc-100 px-3 py-2 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+            Fim de ciclo — nenhum retorno será agendado; o lead sai da fila e vai pro “fora do ciclo”.
+          </p>
+        )}
+        {isNaoAgora && (
+          <p className="col-span-2 text-xs text-orange-600 dark:text-orange-400">
+            “Não agora” reentra no ciclo: sem data, agenda retomada em +90 dias.
+          </p>
+        )}
         {stage === "perdido" && (
           <div className="col-span-2">
             <div className={label}>Motivo da perda (obrigatório — fim de ciclo)</div>
             <input name="lostReason" required className={field} placeholder="ex: decisor recusou — já tem escritório" />
           </div>
-        )}
-        {stage === "nao_agora" && (
-          <p className="col-span-2 text-xs text-orange-600 dark:text-orange-400">
-            “Não agora” reentra no ciclo: sem data, agenda retomada em +90 dias.
-          </p>
         )}
         <div className="col-span-2">
           <div className={label}>Observações</div>

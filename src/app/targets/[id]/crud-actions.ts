@@ -2,22 +2,25 @@
 
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
+import { requireUser } from "@/auth/dal";
 import { getDb } from "@/db";
 import { companies, contacts, targets } from "@/db/schema";
 import type { Stage } from "@/core/pipeline";
 
 const s = (v: FormDataEntryValue | null) => (typeof v === "string" ? v.trim() : "");
+const digits = (v: FormDataEntryValue | null) => s(v).replace(/\D/g, "");
 const on = (v: FormDataEntryValue | null) => v === "on" || v === "true";
 
 // -------------------------------------------------- contatos
 export async function createContact(companyId: string, fd: FormData) {
+  await requireUser();
   const db = getDb();
   await db.insert(contacts).values({
     companyId,
     nome: s(fd.get("nome")) || null,
     papel: (s(fd.get("papel")) || "desconhecido") as typeof contacts.$inferInsert.papel,
     cargo: s(fd.get("cargo")) || null,
-    telefoneDireto: s(fd.get("telefoneDireto")) || null,
+    telefoneDireto: digits(fd.get("telefoneDireto")) || null,
     email: s(fd.get("email")) || null,
     emailGenerico: on(fd.get("emailGenerico")),
     melhorHorario: s(fd.get("melhorHorario")) || null,
@@ -26,6 +29,7 @@ export async function createContact(companyId: string, fd: FormData) {
 }
 
 export async function updateContact(contactId: string, fd: FormData) {
+  await requireUser();
   const db = getDb();
   await db
     .update(contacts)
@@ -33,7 +37,7 @@ export async function updateContact(contactId: string, fd: FormData) {
       nome: s(fd.get("nome")) || null,
       papel: (s(fd.get("papel")) || "desconhecido") as typeof contacts.$inferInsert.papel,
       cargo: s(fd.get("cargo")) || null,
-      telefoneDireto: s(fd.get("telefoneDireto")) || null,
+      telefoneDireto: digits(fd.get("telefoneDireto")) || null,
       email: s(fd.get("email")) || null,
       emailGenerico: on(fd.get("emailGenerico")),
       melhorHorario: s(fd.get("melhorHorario")) || null,
@@ -44,6 +48,7 @@ export async function updateContact(contactId: string, fd: FormData) {
 }
 
 export async function deleteContact(contactId: string) {
+  await requireUser();
   const db = getDb();
   await db.delete(contacts).where(eq(contacts.id, contactId));
   revalidatePath("/", "layout");
@@ -51,6 +56,7 @@ export async function deleteContact(contactId: string) {
 
 // -------------------------------------------------- alvo
 export async function updateTarget(targetId: string, fd: FormData) {
+  await requireUser();
   const db = getDb();
   const stage = s(fd.get("stage"));
   const mental = s(fd.get("mentalState"));
@@ -72,6 +78,7 @@ export async function updateTarget(targetId: string, fd: FormData) {
 }
 
 export async function archiveTargetDetail(targetId: string, fd: FormData) {
+  await requireUser();
   const db = getDb();
   await db
     .update(targets)
@@ -81,6 +88,7 @@ export async function archiveTargetDetail(targetId: string, fd: FormData) {
 }
 
 export async function unarchiveTarget(targetId: string) {
+  await requireUser();
   const db = getDb();
   await db
     .update(targets)
@@ -91,6 +99,7 @@ export async function unarchiveTarget(targetId: string) {
 
 // -------------------------------------------------- empresa
 export async function updateCompany(companyId: string, fd: FormData) {
+  await requireUser();
   const db = getDb();
   const razao = s(fd.get("razaoSocial"));
   await db
@@ -98,11 +107,11 @@ export async function updateCompany(companyId: string, fd: FormData) {
     .set({
       ...(razao ? { razaoSocial: razao } : {}),
       nomeFantasia: s(fd.get("nomeFantasia")) || null,
-      telefones: [s(fd.get("tel1")), s(fd.get("tel2"))].filter(Boolean),
+      telefones: [digits(fd.get("tel1")), digits(fd.get("tel2"))].filter(Boolean),
       emails: [s(fd.get("email1")), s(fd.get("email2"))].filter(Boolean),
       cnaePrincipal: s(fd.get("cnaePrincipal")) || null,
       porte: s(fd.get("porte")) || null,
-      uf: s(fd.get("uf")).slice(0, 2) || null,
+      uf: s(fd.get("uf")).slice(0, 2).toUpperCase() || null,
       municipio: s(fd.get("municipio")) || null,
       notes: s(fd.get("notes")) || null,
       updatedAt: new Date(),

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { requireUser } from "@/auth/dal";
 import { getCampaignBySlug, getTriagemQueue } from "@/db/queries";
 import { triageCompany } from "./actions";
 import { fmtCnpj, fmtMoney } from "@/lib/format";
@@ -10,6 +11,7 @@ const th = "px-3 py-2 text-left text-xs font-semibold text-zinc-500";
 const td = "px-3 py-2 align-top";
 
 export default async function TriagemPage({ params }: { params: Promise<{ slug: string }> }) {
+  await requireUser();
   const { slug } = await params;
   const campaign = await getCampaignBySlug(slug);
   if (!campaign) notFound();

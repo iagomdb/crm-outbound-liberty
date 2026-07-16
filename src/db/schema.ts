@@ -8,6 +8,8 @@
  *   targets    → empresa ↔ campanha = o registro de pipeline (estágio, cadência, pretexto novo)
  *   activities → cada ligação/tentativa (reached_human, stalled_at, objeção, objetivo batido)
  *   meetings   → vitória #1 (casos separados, handoff pro escritório)
+ *   users      → operador do CRM (login/senha — módulo em src/auth)
+ *   sessions   → sessões de login (cookie guarda o token; o banco só o hash dele)
  */
 import { relations, sql } from "drizzle-orm";
 import {
@@ -32,9 +34,10 @@ export const campaignStatus = pgEnum("campaign_status", ["ativa", "pausada", "ar
 /** Papel de quem atende (gatekeeper vs decisor). O alvo é o DECISOR. */
 export const contactRole = pgEnum("contact_role", ["atendente", "analista", "decisor", "desconhecido"]);
 
-/** Funil: novo → tentando → conversa → qualificado → reunião → handoff. */
+/** Funil: novo → fit (triado, pré-fila) → tentando → conversa → qualificado → reunião → handoff. */
 export const targetStage = pgEnum("target_stage", [
   "novo",
+  "fit",
   "tentando",
   "conversa",
   "qualificado",
@@ -99,7 +102,7 @@ export const campaigns = pgTable("campaigns", {
 // ---------------------------------------------------------------- companies (global, por CNPJ)
 export const companies = pgTable("companies", {
   id: uuid().defaultRandom().primaryKey(),
-  cnpj: varchar({ length: 14 }).notNull().unique(), // só dígitos (canônico)
+  cnpj: varchar({ length: 14 }).unique(), // só dígitos (canônico); null = lead sem CNPJ (ex.: Google Maps)
   razaoSocial: text().notNull(),
   nomeFantasia: text(),
   dataAbertura: date(),
@@ -122,6 +125,15 @@ export const companies = pgTable("companies", {
   source: text().default("consultas.plus"),
   icpFit: boolean(), // null = não triado; true/false = decisão de triagem de ICP
   notes: text(),
+  ...timestamps,
+});
+
+// ---------------------------------------------------------------- email_templates
+export const emailTemplates = pgTable("email_templates", {
+  id: uuid().defaultRandom().primaryKey(),
+  name: text().notNull(), // nome interno ("Follow-up — outras áreas")
+  subject: text().notNull(),
+  body: text().notNull(), // texto puro; {{empresa}} e {{contato}} substituídos ao compor
   ...timestamps,
 });
 
@@ -233,6 +245,30 @@ export const meetings = pgTable(
   (t) => [index("meetings_target_idx").on(t.targetId)],
 );
 
+// ---------------------------------------------------------------- users / sessions (auth)
+export const users = pgTable("users", {
+  id: uuid().defaultRandom().primaryKey(),
+  email: text().notNull().unique(), // sempre minúsculo (normalizado no cadastro e no login)
+  name: text().notNull(),
+  passwordHash: text().notNull(), // scrypt — formato autodescritivo (src/auth/password.ts)
+  active: boolean().notNull().default(true), // false = bloqueia login sem apagar o usuário
+  ...timestamps,
+});
+
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: uuid().defaultRandom().primaryKey(),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: varchar({ length: 64 }).notNull().unique(), // sha256 hex; o token cru só existe no cookie
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("sessions_user_idx").on(t.userId)],
+);
+
 // ---------------------------------------------------------------- relations (query API)
 export const campaignsRelations = relations(campaigns, ({ many }) => ({
   targets: many(targets),
@@ -264,4 +300,12 @@ export const activitiesRelations = relations(activities, ({ one }) => ({
 export const meetingsRelations = relations(meetings, ({ one }) => ({
   target: one(targets, { fields: [meetings.targetId], references: [targets.id] }),
   activity: one(activities, { fields: [meetings.activityId], references: [activities.id] }),
+}));
+
+export const usersRelations = relations(users, ({ many }) => ({
+  sessions: many(sessions),
+}));
+
+export const sessionsRelations = relations(sessions, ({ one }) => ({
+  user: one(users, { fields: [sessions.userId], references: [users.id] }),
 }));

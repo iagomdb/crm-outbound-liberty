@@ -1,0 +1,1 @@
+ALTER TYPE "public"."target_stage" ADD VALUE 'fit' BEFORE 'tentando';

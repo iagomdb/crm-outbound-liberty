@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { eq, sql } from "drizzle-orm";
+import { requireUser } from "@/auth/dal";
 import { getDb } from "@/db";
 import { targets } from "@/db/schema";
 import type { Stage } from "@/core/pipeline";
@@ -13,6 +14,7 @@ import { isCycleEnd, resolveTask } from "@/core/tasks";
  * `nao_agora` reentra com task longa se não tinha nenhuma.
  */
 export async function moveTarget(targetId: string, newStage: string) {
+  await requireUser();
   const db = getDb();
   const now = new Date();
   const stage = newStage as Stage;
@@ -40,6 +42,7 @@ export async function moveTarget(targetId: string, newStage: string) {
 
 /** Arquiva um lead (tira do board), guardando o motivo. */
 export async function archiveTarget(targetId: string, reason: string) {
+  await requireUser();
   const db = getDb();
   const now = new Date();
   await db

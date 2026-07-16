@@ -32,8 +32,17 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-crm}:${POSTGRES_PASSWORD:-crm}@db:5432/${POSTGRES_DB:-crm}
       NODE_ENV: development
       TZ: America/Sao_Paulo # golden-hours e horários no fuso certo
+      WATCHPACK_POLLING: "true" # bind mount no Windows não propaga eventos de arquivo — sem isso o hot reload não vê edições do host
+      # SMTP (envio de e-mail) — valores vêm do .env
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_SECURE: ${SMTP_SECURE:-}
     ports:
-      - "3000:3000"
+      # WEB_PORT no .env se a 3000 estiver ocupada no host. Container segue em 3000.
+      - "${WEB_PORT:-3000}:3000"
     volumes:
       - .:/app # hot-reload do código
       - /app/node_modules # preserva o node_modules da imagem (musl)

@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { requireUser } from "@/auth/dal";
 import { getCampaignsWithStats } from "@/db/queries";
+import { MaskedInput } from "@/components/MaskedInput";
 import { createCompany } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +14,7 @@ export default async function NewCompanyPage({
 }: {
   searchParams: Promise<{ campaign?: string }>;
 }) {
+  await requireUser();
   const { campaign } = await searchParams;
   const camps = await getCampaignsWithStats();
 
@@ -30,8 +33,8 @@ export default async function NewCompanyPage({
           <input name="razaoSocial" required className={inp} />
         </div>
         <div>
-          <div className={lbl}>CNPJ * (14 dígitos)</div>
-          <input name="cnpj" required placeholder="00.000.000/0000-00" className={inp} />
+          <div className={lbl}>CNPJ *</div>
+          <MaskedInput mask="cnpj" name="cnpj" required className={inp} />
         </div>
         <div>
           <div className={lbl}>Nome fantasia</div>
@@ -39,11 +42,11 @@ export default async function NewCompanyPage({
         </div>
         <div>
           <div className={lbl}>Telefone 1</div>
-          <input name="tel1" className={inp} />
+          <MaskedInput mask="phone" name="tel1" className={inp} />
         </div>
         <div>
           <div className={lbl}>Telefone 2</div>
-          <input name="tel2" className={inp} />
+          <MaskedInput mask="phone" name="tel2" className={inp} />
         </div>
         <div>
           <div className={lbl}>E-mail 1</div>
@@ -64,7 +67,7 @@ export default async function NewCompanyPage({
         <div className="grid grid-cols-2 gap-2">
           <div>
             <div className={lbl}>UF</div>
-            <input name="uf" maxLength={2} className={inp} />
+            <MaskedInput mask="uf" name="uf" maxLength={2} className={inp} />
           </div>
           <div>
             <div className={lbl}>Município</div>

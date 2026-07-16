@@ -5,6 +5,7 @@ export type ObjectiveHit = (typeof objectiveHit.enumValues)[number];
 
 export const STAGE_LABELS: Record<Stage, string> = {
   novo: "Novo",
+  fit: "Fit (pré-fila)",
   tentando: "Tentando",
   conversa: "Conversa",
   qualificado: "Qualificado",
@@ -18,6 +19,7 @@ export const STAGE_LABELS: Record<Stage, string> = {
 /** Ordem do funil, do topo ao fundo. */
 export const STAGE_ORDER: Stage[] = [
   "novo",
+  "fit",
   "tentando",
   "conversa",
   "qualificado",
@@ -31,6 +33,7 @@ export const STAGE_ORDER: Stage[] = [
 /** Estágios que ainda pedem ação (entram na fila de ligação). */
 export const ACTIVE_STAGES: Stage[] = [
   "novo",
+  "fit",
   "tentando",
   "conversa",
   "qualificado",
@@ -43,6 +46,7 @@ export const TERMINAL_STAGES: Stage[] = ["ganho", "perdido"];
 
 export const STAGE_CLASSES: Record<Stage, string> = {
   novo: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+  fit: "bg-lime-100 text-lime-800 dark:bg-lime-950 dark:text-lime-300",
   tentando: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
   conversa: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300",
   qualificado: "bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300",
@@ -56,16 +60,18 @@ export const STAGE_CLASSES: Record<Stage, string> = {
 /**
  * Sugere o próximo estágio a partir do resultado da ligação — encoda o funil.
  * O objetivo #1 (reunião) manda; senão qualificado; senão pelo menos "conversa"
- * se falou com humano; senão "tentando".
+ * se falou com humano; senão "tentando". "fit" (pré-fila) se comporta como
+ * "novo": a primeira ligação sempre tira o lead de lá.
  */
 export function suggestStage(
   current: Stage,
   o: { reachedHuman: boolean; objectiveHit: ObjectiveHit; qualified: boolean },
 ): Stage {
+  const preCall = current === "novo" || current === "fit";
   if (o.objectiveHit === "reuniao") return "reuniao_agendada";
   if (o.qualified) return "qualificado";
-  if (o.reachedHuman) return current === "novo" || current === "tentando" ? "conversa" : current;
-  return current === "novo" ? "tentando" : current;
+  if (o.reachedHuman) return preCall || current === "tentando" ? "conversa" : current;
+  return preCall ? "tentando" : current;
 }
 
 // -------------------------------------------------- rótulos pras telas

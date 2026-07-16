@@ -39,6 +39,9 @@ yarn-error.log*
 /data/*
 !/data/.gitkeep
 
+# docs
+/docs/
+
 # vercel
 .vercel
 

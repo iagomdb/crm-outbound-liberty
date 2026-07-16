@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useOptimistic } from "react";
+import { startTransition, useOptimistic, useState } from "react";
 import Link from "next/link";
 import {
   DndContext,
@@ -27,6 +27,7 @@ export type BoardItem = {
 export type BoardColumn = { stage: string; label: string; items: BoardItem[] };
 
 type MoveMsg = { id: string; toStage: string };
+type StageOption = { stage: string; label: string };
 
 export function KanbanBoard({
   columns,
@@ -51,13 +52,11 @@ export function KanbanBoard({
     }));
     return stripped.map((c) => (c.stage === toStage && moved ? { ...c, items: [moved, ...c.items] } : c));
   });
+  const [q, setQ] = useState("");
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  function onDragEnd(e: DragEndEvent) {
-    const id = String(e.active.id);
-    const toStage = e.over ? String(e.over.id) : null;
-    if (!toStage) return;
+  function moveTo(id: string, toStage: string) {
     const from = cols.find((c) => c.items.some((it) => it.id === id));
     if (!from || from.stage === toStage) return;
     startTransition(async () => {
@@ -66,40 +65,93 @@ export function KanbanBoard({
     });
   }
 
+  function onDragEnd(e: DragEndEvent) {
+    const toStage = e.over ? String(e.over.id) : null;
+    if (!toStage) return;
+    moveTo(String(e.active.id), toStage);
+  }
+
+  const stageOptions: StageOption[] = cols.map((c) => ({ stage: c.stage, label: c.label }));
+
+  // busca client-side: com 100+ cards numa coluna, achar uma empresa rolando é inviável
+  const norm = q.trim().toLowerCase();
+  const view = cols.map((c) => ({
+    ...c,
+    total: c.items.length,
+    items: norm
+      ? c.items.filter((it) =>
+          `${it.company} ${it.cnpj} ${it.nextActionPretext ?? ""}`.toLowerCase().includes(norm),
+        )
+      : c.items,
+  }));
+
   return (
-    <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-      <div className="flex gap-3 overflow-x-auto pb-2">
-        {cols.map((col) => (
-          <Column key={col.stage} col={col} archiveAction={archiveAction} />
-        ))}
-      </div>
-    </DndContext>
+    <div className="flex flex-col gap-2">
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="🔍 filtrar por empresa, CNPJ ou pretexto…"
+        className="w-72 rounded-md border border-zinc-300 bg-white px-2.5 py-1.5 text-sm placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-950"
+      />
+      <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+        <div className="flex items-start gap-3 overflow-x-auto pb-2">
+          {view.map((col) => (
+            <Column key={col.stage} col={col} stageOptions={stageOptions} onMove={moveTo} archiveAction={archiveAction} />
+          ))}
+        </div>
+      </DndContext>
+    </div>
   );
 }
 
-function Column({ col, archiveAction }: { col: BoardColumn; archiveAction: (id: string, reason: string) => Promise<void> }) {
+function Column({
+  col,
+  stageOptions,
+  onMove,
+  archiveAction,
+}: {
+  col: BoardColumn & { total: number };
+  stageOptions: StageOption[];
+  onMove: (id: string, stage: string) => void;
+  archiveAction: (id: string, reason: string) => Promise<void>;
+}) {
   const { setNodeRef, isOver } = useDroppable({ id: col.stage });
   return (
     <div
       ref={setNodeRef}
-      className={`flex w-64 shrink-0 flex-col rounded-xl border bg-zinc-50 p-2 dark:bg-zinc-900/50 ${
+      className={`flex max-h-[70vh] w-64 shrink-0 flex-col rounded-xl border bg-zinc-50 p-2 dark:bg-zinc-900/50 ${
         isOver ? "border-sky-400 ring-2 ring-sky-400/40" : "border-zinc-200 dark:border-zinc-800"
       }`}
     >
       <div className="flex items-center justify-between px-1 pb-2 text-xs font-semibold">
         <span>{col.label}</span>
-        <span className="rounded bg-zinc-200 px-1.5 text-zinc-500 dark:bg-zinc-800">{col.items.length}</span>
+        <span className="rounded bg-zinc-200 px-1.5 text-zinc-500 dark:bg-zinc-800">
+          {col.items.length !== col.total ? `${col.items.length}/${col.total}` : col.total}
+        </span>
       </div>
-      <div className="flex min-h-8 flex-col gap-2">
+      {/* a coluna rola sozinha — a página não vira uma lista de 100+ cards */}
+      <div className="flex min-h-8 flex-col gap-2 overflow-y-auto pr-0.5">
         {col.items.map((it) => (
-          <Card key={it.id} item={it} archiveAction={archiveAction} />
+          <Card key={it.id} item={it} stage={col.stage} stageOptions={stageOptions} onMove={onMove} archiveAction={archiveAction} />
         ))}
       </div>
     </div>
   );
 }
 
-function Card({ item, archiveAction }: { item: BoardItem; archiveAction: (id: string, reason: string) => Promise<void> }) {
+function Card({
+  item,
+  stage,
+  stageOptions,
+  onMove,
+  archiveAction,
+}: {
+  item: BoardItem;
+  stage: string;
+  stageOptions: StageOption[];
+  onMove: (id: string, stage: string) => void;
+  archiveAction: (id: string, reason: string) => Promise<void>;
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: item.id });
   const d = deathFor({ attempts: item.attempts, stageChangedAt: item.stageChangedAt });
   const style = transform ? { transform: `translate(${transform.x}px, ${transform.y}px)`, zIndex: 50 } : undefined;
@@ -140,24 +192,42 @@ function Card({ item, archiveAction }: { item: BoardItem; archiveAction: (id: st
         <div className="h-1 w-full overflow-hidden rounded bg-zinc-200 dark:bg-zinc-800">
           <div className={`h-1 rounded ${DEATH_CLASSES[d.state].bar}`} style={{ width: `${Math.round(d.score * 100)}%` }} />
         </div>
-        <div className="mt-1 flex items-center justify-between text-[10px]">
-          <span className={DEATH_CLASSES[d.state].text}>
+        <div className="mt-1 flex items-center justify-between gap-1 text-[10px]">
+          <span className={`truncate ${DEATH_CLASSES[d.state].text}`}>
             {item.attempts} tent · {d.daysStalled}d · {deathLabel(d)}
           </span>
-          {d.state !== "ok" && (
-            <button
-              onClick={() => {
-                if (confirm(`Arquivar "${item.company}"?`)) {
-                  startTransition(() => {
-                    void archiveAction(item.id, "morte: cadência/tempo esgotado");
-                  });
-                }
-              }}
-              className="rounded bg-red-100 px-1.5 py-0.5 font-medium text-red-700 hover:bg-red-200 dark:bg-red-950 dark:text-red-400"
+          <div className="flex shrink-0 items-center gap-1">
+            {d.state !== "ok" && (
+              <button
+                onClick={() => {
+                  if (confirm(`Arquivar "${item.company}"?`)) {
+                    startTransition(() => {
+                      void archiveAction(item.id, "morte: cadência/tempo esgotado");
+                    });
+                  }
+                }}
+                className="rounded bg-red-100 px-1.5 py-0.5 font-medium text-red-700 hover:bg-red-200 dark:bg-red-950 dark:text-red-400"
+              >
+                arquivar
+              </button>
+            )}
+            {/* mover sem arrastar — com colunas longas, drag até o destino é penoso */}
+            <select
+              value=""
+              onChange={(e) => e.target.value && onMove(item.id, e.target.value)}
+              className="cursor-pointer rounded border border-zinc-200 bg-transparent px-1 py-0.5 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950"
+              aria-label="mover para outro estágio"
             >
-              arquivar
-            </button>
-          )}
+              <option value="">mover ➜</option>
+              {stageOptions
+                .filter((s) => s.stage !== stage)
+                .map((s) => (
+                  <option key={s.stage} value={s.stage}>
+                    {s.label}
+                  </option>
+                ))}
+            </select>
+          </div>
         </div>
       </div>
     </div>

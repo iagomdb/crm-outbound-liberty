@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { requireUser } from "@/auth/dal";
 import { getNextInQueue, getTargetDetail } from "@/db/queries";
 import { StageBadge } from "@/components/StageBadge";
 import { CallLogForm } from "@/components/CallLogForm";
+import { ActivityHistory } from "@/components/ActivityHistory";
 import { logCallAndNext } from "./actions";
 import { fmtDateTime, fmtPhone } from "@/lib/format";
 import {
@@ -29,6 +31,7 @@ const GH_UI: Record<string, { txt: string; cls: string }> = {
 const lbl = "text-xs text-zinc-500";
 
 export default async function TaskPage({ params }: { params: Promise<{ targetId: string }> }) {
+  await requireUser();
   const { targetId } = await params;
   const [t, nextId] = await Promise.all([getTargetDetail(targetId), getNextInQueue(targetId)]);
   if (!t) notFound();
@@ -99,6 +102,12 @@ export default async function TaskPage({ params }: { params: Promise<{ targetId:
               {p.who && <span className="ml-1.5 text-xs font-normal opacity-70">({p.who})</span>}
             </a>
           ))}
+          <Link
+            href={`/targets/${t.id}/email?back=fila`}
+            className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+          >
+            ✉️ e-mail
+          </Link>
         </div>
 
         <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
@@ -191,24 +200,10 @@ export default async function TaskPage({ params }: { params: Promise<{ targetId:
             {t.notes && <p className="mt-3 border-t border-zinc-100 pt-2 text-xs text-zinc-500 dark:border-zinc-900">obs. do alvo: {t.notes}</p>}
           </section>
 
-          {/* histórico compacto */}
+          {/* histórico: uma linha por ligação, clique expande o registro completo */}
           <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
             <h2 className="mb-2 text-sm font-semibold">Histórico ({t.activities.length})</h2>
-            {t.activities.length === 0 ? (
-              <p className="text-sm text-zinc-500">Sem ligações registradas.</p>
-            ) : (
-              <ul className="flex flex-col gap-1.5 text-xs">
-                {t.activities.map((a) => (
-                  <li key={a.id} className="flex flex-wrap gap-x-2 text-zinc-500">
-                    <span className="text-zinc-400">{fmtDateTime(a.occurredAt)}</span>
-                    <span>{a.reachedHuman ? "conversa" : "discada"}</span>
-                    {a.objectiveHit !== "nenhum" && <span className="text-emerald-600 dark:text-emerald-400">{OBJECTIVE_LABELS[a.objectiveHit]}</span>}
-                    {a.outcome && <span className="text-zinc-600 dark:text-zinc-300">— {a.outcome}</span>}
-                    {a.nextActionPretext && <span className="italic">(pretexto seguinte: {a.nextActionPretext})</span>}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <ActivityHistory activities={t.activities} />
           </section>
         </div>
 

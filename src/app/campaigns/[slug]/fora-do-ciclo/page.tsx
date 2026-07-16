@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { requireUser } from "@/auth/dal";
 import { getCampaignBySlug, getForaDoCiclo } from "@/db/queries";
 import { StageBadge } from "@/components/StageBadge";
 import { fmtDate, fmtDateTime } from "@/lib/format";
@@ -14,6 +15,7 @@ const td = "px-3 py-2 align-top";
  * e data — pra revisar se o funil está vazando por razão errada.
  */
 export default async function ForaDoCicloPage({ params }: { params: Promise<{ slug: string }> }) {
+  await requireUser();
   const { slug } = await params;
   const campaign = await getCampaignBySlug(slug);
   if (!campaign) notFound();

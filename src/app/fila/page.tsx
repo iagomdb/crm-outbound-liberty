@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireUser } from "@/auth/dal";
 import { getDailyQueue, getOrphans, getTodayStats, type FilaItem } from "@/db/queries";
 import { deathFor, deathLabel, DEATH_CLASSES } from "@/core/death";
 import { STAGE_LABELS } from "@/core/pipeline";
@@ -74,6 +75,7 @@ function Section({ title, cls, items, hintFor }: { title: string; cls: string; i
 }
 
 export default async function FilaPage() {
+  await requireUser();
   const [q, stats, orphans] = await Promise.all([getDailyQueue(), getTodayStats(), getOrphans()]);
   const gh = GH_UI[goldenHourLabel()];
   const total = q.atrasadas.length + q.hoje.length + q.estadoZero.length;

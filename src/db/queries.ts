@@ -1,6 +1,6 @@
-import { and, asc, count, desc, eq, isNull, lt, not, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, lt, not, notInArray, or, sql } from "drizzle-orm";
 import { getDb } from "./index";
-import { activities, campaigns, companies, meetings, targets } from "./schema";
+import { activities, campaigns, companies, emailTemplates, meetings, targets } from "./schema";
 import { type Stage, TERMINAL_STAGES } from "@/core/pipeline";
 import { CYCLE_END_STAGES } from "@/core/tasks";
 import type { FunnelCounts } from "@/core/funnel";
@@ -184,10 +184,10 @@ export async function getDailyQueue(now = new Date()) {
     .where(
       and(
         isNull(targets.archivedAt),
-        eq(targets.stage, "novo"),
+        // triado como fit (a triagem move novo → fit) e ainda sem primeira ligação
+        eq(targets.stage, "fit"),
         eq(targets.attempts, 0),
         isNull(targets.nextActionAt),
-        eq(companies.icpFit, true),
       ),
     )
     .orderBy(desc(targets.priority), asc(targets.createdAt))
@@ -223,7 +223,8 @@ export async function getOrphans() {
       and(
         activeTarget,
         isNull(targets.nextActionAt),
-        not(and(eq(targets.stage, "novo"), eq(targets.attempts, 0))!),
+        // pré-ciclo (novo/fit sem tentativa) não é órfão: ainda nem entrou no ciclo
+        not(and(inArray(targets.stage, ["novo", "fit"]), eq(targets.attempts, 0))!),
       ),
     )
     .limit(50);
@@ -313,7 +314,65 @@ export async function getForaDoCiclo(campaignId: string) {
     .limit(500);
 }
 
-const ACTIVE_ONLY: Stage[] = ["novo", "tentando", "conversa", "qualificado", "reuniao_agendada"];
+const ACTIVE_ONLY: Stage[] = ["novo", "fit", "tentando", "conversa", "qualificado", "reuniao_agendada"];
+
+// ---------------------------------------------------------------- aprendizado (o que as ligações ensinaram)
+
+/**
+ * Agregados de aprendizado da campanha: motivos de perda (perdidos + arquivados),
+ * objeções mais ouvidas (com quantas eram só reflexo) e as frases exatas onde a
+ * conversa morreu (stalledAt). Agrupamento por texto normalizado (lower/trim)
+ * pra "Sem tempo" e "sem tempo " contarem juntos.
+ */
+export async function getAprendizado(campaignId: string) {
+  const db = getDb();
+
+  const lossReason = sql`coalesce(nullif(trim(${targets.archiveReason}), ''), nullif(trim(${targets.lostReason}), ''), 'não informado')`;
+  const perdas = await db
+    .select({ reason: sql<string>`min(${lossReason})`, n: count() })
+    .from(targets)
+    .where(
+      and(
+        eq(targets.campaignId, campaignId),
+        or(sql`${targets.archivedAt} is not null`, eq(targets.stage, "perdido")),
+      ),
+    )
+    .groupBy(sql`lower(${lossReason})`)
+    .orderBy(desc(count()));
+
+  const objecoes = await db
+    .select({
+      objection: activities.objection,
+      n: count(),
+      reflexo: sql<number>`(count(*) filter (where ${activities.objectionIsReflexo}))::int`,
+    })
+    .from(activities)
+    .innerJoin(targets, eq(activities.targetId, targets.id))
+    .where(and(eq(targets.campaignId, campaignId), sql`${activities.objection} <> 'nenhuma'`))
+    .groupBy(activities.objection)
+    .orderBy(desc(count()));
+
+  const frase = sql`trim(${activities.stalledAt})`;
+  const frases = await db
+    .select({ frase: sql<string>`min(${frase})`, n: count() })
+    .from(activities)
+    .innerJoin(targets, eq(activities.targetId, targets.id))
+    .where(and(eq(targets.campaignId, campaignId), sql`nullif(trim(${activities.stalledAt}), '') is not null`))
+    .groupBy(sql`lower(${frase})`)
+    .orderBy(desc(count()))
+    .limit(30);
+
+  return { perdas, objecoes, frases };
+}
+
+// ---------------------------------------------------------------- e-mail
+
+export async function getEmailTemplates() {
+  const db = getDb();
+  return db.select().from(emailTemplates).orderBy(asc(emailTemplates.name));
+}
+
+export type EmailTemplate = Awaited<ReturnType<typeof getEmailTemplates>>[number];
 
 export type FilaItem = Awaited<ReturnType<typeof getOrphans>>[number];
 export type QueueItem = Awaited<ReturnType<typeof getQueue>>[number];
