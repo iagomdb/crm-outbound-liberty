@@ -1,101 +1,125 @@
-# Deploy na VPS + migração do banco
+# Deploy na VPS (pm2 + nginx + Postgres do host) + migração do banco
 
-Guia pra subir o CRM numa VPS Linux com HTTPS automático e levar o banco atual
-(o Postgres do Docker deste PC, porta 5433) junto.
+Este CRM vai rodar **seguindo o padrão da VPS**, não em Docker:
 
-Arquitetura em produção:
+- **App** (Next.js standalone) rodando via **pm2** direto no host, em `127.0.0.1:3100`.
+- **Banco** no **Postgres 18 do host** (`127.0.0.1:5432`) — um role `crm` + database `crm`,
+  igual ao padrão `dev`/`homolog`/`libertysolutions` (um role superuser + um banco por ambiente).
+- **TLS/proxy** pelo **nginx** já instalado, com **certbot**, via um novo par
+  `sites-available`/`sites-enabled`.
+
+> **NÃO use Docker nem Caddy aqui.** O nginx já ocupa 80/443 com TLS; subir Caddy
+> quebraria. Portas já tomadas na VPS: 80, 443, 3000, 4000, 5000, 5002, 5005, 5432.
+> O CRM usa **3100** (loopback), que o nginx faz proxy pro subdomínio.
+
+Arquitetura:
 
 ```
-Internet ──HTTPS──> Caddy (443) ──> web (Next standalone, :3000) ──> db (Postgres 17)
-                      │
-              cert Let's Encrypt automático
+Internet ──HTTPS(443)──> nginx (host, certbot TLS) ──proxy──> 127.0.0.1:3100 (pm2: crm)
+                                                                     │
+                                                          Postgres 18 host 127.0.0.1:5432 (db "crm")
 ```
 
-Um app Next.js único cobre frontend e API (server actions). **Um subdomínio basta**
-— ex.: `crm.libertysolutions.com.br`. Não há serviço de API separado; `crmapi.*`
-não é necessário.
+App único: frontend e API (server actions) no mesmo `server.js`. **Um subdomínio basta**
+— `crm.libertysolutions.com.br`. Não há backend separado (as outras apps têm par
+backend+frontend; o CRM é um server block só).
 
 ---
 
-## Parte 1 — Gerar o backup do banco atual (neste PC)
+## Parte 1 — Gerar o backup do banco atual (no PC do Iago)
 
-O Docker Desktop precisa estar rodando. O container do banco chama-se `crm-db-1`
-(o `compose.yaml` define `name: crm`).
-
-No PowerShell, na pasta do projeto:
+O banco de origem é o Postgres do Docker do PC (container `crm-db-1`, Postgres 17).
+Docker Desktop precisa estar rodando. No PowerShell, na pasta do projeto:
 
 ```powershell
-# Dump lógico completo (schema + dados), comprimido
 docker exec crm-db-1 pg_dump -U crm -d crm -Fc | Set-Content -Encoding Byte backup-crm.dump
 ```
 
-> `-Fc` = formato custom do pg (comprimido, restaurável com `pg_restore`).
-> `Set-Content -Encoding Byte` evita o PowerShell corromper o binário (não use `>`).
+> `-Fc` = formato custom comprimido (restaura com `pg_restore`).
+> `Set-Content -Encoding Byte` evita o PowerShell corromper o binário — **não** use `>`.
+> Restaurar de PG17 (origem) pro PG18 (VPS) funciona sem problema.
 
-Confira que gerou um arquivo com tamanho > 0:
+Confira o tamanho e leve o `backup-crm.dump` pra VPS (Parte 4).
 
-```powershell
-Get-Item backup-crm.dump | Select-Object Name, Length
+---
+
+## Parte 2 — Pré-requisitos na VPS (uma vez)
+
+**Node 24.** O CRM é Next 16 e precisa de Node 24 pra buildar. Confirme:
+
+```bash
+node -v   # precisa ser >= 24
 ```
 
-Guarde esse `backup-crm.dump` — você vai copiá-lo pra VPS na Parte 4.
+Se for mais antigo, instale o 24 sem afetar as outras apps pm2 (via nvm ou nodesource).
+Prefira nvm pro usuário de deploy se as apps existentes já usam nvm.
 
-**Alternativa** (SQL texto puro, mais fácil de inspecionar, restaura com `psql`):
+**DNS.** Registro **A** `crm` → IP público da VPS (cria `crm.libertysolutions.com.br`).
+Confirme antes de emitir o certificado:
 
-```powershell
-docker exec crm-db-1 pg_dump -U crm -d crm | Set-Content -Encoding utf8 backup-crm.sql
+```bash
+dig +short crm.libertysolutions.com.br   # deve retornar o IP desta VPS
 ```
 
 ---
 
-## Parte 2 — Preparar a VPS (uma vez só)
+## Parte 3 — Banco: role + database no Postgres do host
 
-SSH na VPS. Instale Docker + Compose plugin (Ubuntu/Debian):
+Como superusuário do Postgres (ex.: `sudo -u postgres psql`), crie o role e o db no
+mesmo padrão dos outros ambientes:
 
-```bash
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER   # relogar a sessão SSH depois disso
+```sql
+CREATE ROLE crm WITH LOGIN PASSWORD 'SENHA_FORTE_DO_CRM';
+CREATE DATABASE crm OWNER crm;
 ```
 
-Abra as portas 80 e 443 no firewall (e mantenha 22 pra SSH):
-
-```bash
-sudo ufw allow 22 && sudo ufw allow 80 && sudo ufw allow 443 && sudo ufw enable
-```
-
-**DNS:** no painel do seu domínio, crie um registro **A**:
-
-| Tipo | Nome  | Valor            |
-|------|-------|------------------|
-| A    | `crm` | `IP.DA.SUA.VPS`  |
-
-Isso cria `crm.libertysolutions.com.br`. Espere propagar (checar com
-`ping crm.libertysolutions.com.br` ou `dig +short crm.libertysolutions.com.br`).
-O Caddy só consegue emitir o certificado depois que o DNS aponta certo.
+> Use uma senha forte e guarde-a; ela vai no `DATABASE_URL` do `.env` (Parte 5).
+> O Postgres do host só escuta em 127.0.0.1, então a conexão é por loopback.
 
 ---
 
-## Parte 3 — Subir o código na VPS
+## Parte 4 — Restaurar o dump no banco do host
 
-Clone o repositório (ou copie a pasta). Assumindo git:
+Copie o backup pra VPS (no PowerShell do PC):
 
-```bash
-git clone <URL-DO-SEU-REPO> crm && cd crm
+```powershell
+scp backup-crm.dump deploy@IP.DA.VPS:/home/deploy/
 ```
 
-Crie o arquivo `.env` **na VPS** (não vai versionado — precisa criar à mão):
+Na VPS, restaure pro database `crm`. O dump não contém os roles, então mapeamos o dono
+pro role `crm` com `--no-owner`:
+
+```bash
+sudo -u postgres pg_restore -d crm --no-owner --clean --if-exists /home/deploy/backup-crm.dump
+```
+
+> `--no-owner` faz os objetos pertencerem a quem restaura/ao db (role `crm`), ignorando
+> o dono original do dump. `--clean --if-exists` recria objetos sem erro se não existirem.
+>
+> Se você gerou `.sql` texto em vez de `.dump`:
+> `sudo -u postgres psql -d crm -f /home/deploy/backup-crm.sql`
+
+---
+
+## Parte 5 — Código do app + build + pm2
+
+Coloque o código no padrão da VPS (`/home/deploy/<nome>`):
+
+```bash
+cd /home/deploy
+git clone https://github.com/iagomdb/crm-outbound-liberty.git crm
+cd crm
+```
+
+Crie o `.env` (não versionado):
 
 ```bash
 cat > .env <<'EOF'
-# Banco (troque a senha por uma forte!)
-POSTGRES_USER=crm
-POSTGRES_PASSWORD=TROQUE_POR_UMA_SENHA_FORTE
-POSTGRES_DB=crm
-
-# HTTPS
-DOMAIN=crm.libertysolutions.com.br
-ACME_EMAIL=iagobernardi@gmail.com
-
+DATABASE_URL=postgres://crm:SENHA_FORTE_DO_CRM@127.0.0.1:5432/crm
+NODE_ENV=production
+PORT=3100
+HOSTNAME=127.0.0.1
+TZ=America/Sao_Paulo
 # SMTP (envio de e-mail) — preencha se for usar
 SMTP_HOST=
 SMTP_PORT=587
@@ -105,87 +129,126 @@ SMTP_FROM=
 EOF
 ```
 
-> A senha do Postgres que você definir aqui é a senha do banco **novo** na VPS.
-> O `DATABASE_URL` do app é montado a partir dela automaticamente no compose.
+> O cookie de sessão usa `Secure` em produção; como o nginx serve HTTPS, funciona sem
+> `AUTH_COOKIE_SECURE`. Não defina essa variável.
 
-Suba tudo (build da imagem de produção + Postgres + Caddy):
-
-```bash
-docker compose -f compose.prod.yaml up -d --build
-```
-
-Acompanhe o Caddy emitir o certificado:
+Instale, buildue rode o standalone. O build gera `.next/standalone/server.js`:
 
 ```bash
-docker compose -f compose.prod.yaml logs -f caddy
+npm ci
+npm run build
+
+# O standalone precisa dos estáticos ao lado do server.js:
+cp -r .next/static .next/standalone/.next/static
+cp -r public .next/standalone/public 2>/dev/null || true
 ```
 
-Quando aparecer `certificate obtained successfully`, abra
-`https://crm.libertysolutions.com.br` — deve carregar (banco ainda vazio; a Parte 4 resolve).
+Suba com pm2 apontando pro server.js standalone. Como o standalone **não** lê `.env`
+sozinho, carregue as variáveis via um ecosystem file (padrão pm2):
+
+```bash
+cat > /home/deploy/crm/ecosystem.config.js <<'EOF'
+const fs = require("fs");
+const path = require("path");
+// Lê o .env da pasta e injeta no processo pm2.
+const env = {};
+for (const line of fs.readFileSync(path.join(__dirname, ".env"), "utf8").split("\n")) {
+  const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+  if (m) env[m[1]] = m[2];
+}
+module.exports = {
+  apps: [{
+    name: "crm",
+    script: ".next/standalone/server.js",
+    cwd: __dirname,
+    env,
+  }],
+};
+EOF
+
+pm2 start ecosystem.config.js
+pm2 save
+```
+
+> Confirme: `pm2 logs crm` sem erros e `curl -s 127.0.0.1:3100 | head` respondendo.
+> Se as apps existentes já usam outro padrão de env no pm2, siga o padrão delas.
 
 ---
 
-## Parte 4 — Restaurar o banco na VPS
+## Parte 6 — nginx: server block + TLS (certbot)
 
-Copie o backup do seu PC pra VPS (rode no PowerShell do PC):
+Crie `/etc/nginx/sites-available/crm.libertysolutions.com.br` seguindo o padrão dos
+outros sites da VPS. Base (o certbot completa a parte TLS ao rodar):
 
-```powershell
-scp backup-crm.dump usuario@IP.DA.SUA.VPS:/home/usuario/crm/
+```nginx
+server {
+    server_name crm.libertysolutions.com.br;
+    client_max_body_size 25m;   # importação de planilhas Excel
+
+    location / {
+        proxy_pass http://127.0.0.1:3100;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    listen 80;
+}
 ```
 
-Na VPS, com a stack já rodando, restaure pro container do banco:
+> Copie o estilo exato de um site liberty-* existente se divergir nos headers.
+
+Ative e teste:
 
 ```bash
-# Copia o dump pra dentro do container
-docker cp backup-crm.dump crm-db-1:/tmp/backup-crm.dump
-
-# Restaura (--clean recria objetos; --if-exists evita erro se não existirem ainda)
-docker exec crm-db-1 pg_restore -U crm -d crm --clean --if-exists /tmp/backup-crm.dump
+sudo ln -s /etc/nginx/sites-available/crm.libertysolutions.com.br /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Se você gerou o `.sql` (alternativa da Parte 1):
+Emita o certificado (certbot ajusta o server block pra 443 automaticamente):
 
 ```bash
-docker cp backup-crm.sql crm-db-1:/tmp/backup-crm.sql
-docker exec crm-db-1 psql -U crm -d crm -f /tmp/backup-crm.sql
+sudo certbot --nginx -d crm.libertysolutions.com.br
 ```
-
-Reinicie o web pra garantir conexão limpa e teste o login:
-
-```bash
-docker compose -f compose.prod.yaml restart web
-```
-
-Pronto — `https://crm.libertysolutions.com.br` agora com seus dados.
 
 ---
 
-## Atualizações futuras (deploy de nova versão)
+## Parte 7 — Validar
+
+- `pm2 status` → `crm` `online`
+- `https://crm.libertysolutions.com.br` abre com cadeado
+- Login funciona e os dados do backup aparecem
+
+---
+
+## Atualizações futuras
 
 ```bash
-cd crm
+cd /home/deploy/crm
 git pull
-docker compose -f compose.prod.yaml up -d --build
+npm ci
+npm run build
+cp -r .next/static .next/standalone/.next/static
+cp -r public .next/standalone/public 2>/dev/null || true
+pm2 restart crm --update-env
 ```
-
-O Postgres tem `restart: unless-stopped` e volume persistente (`pgdata`) — os dados
-não somem entre deploys. Só `web` e `caddy` são recriados.
 
 ## Migrações de schema (Drizzle)
 
-Se o schema mudou (novas migrations em `src/db/migrations`), aplique dentro do container:
+Se houver novas migrations em `src/db/migrations`, aplique apontando pro banco do host:
 
 ```bash
-docker exec -w /app crm-web-1 npx drizzle-kit migrate
+cd /home/deploy/crm
+DATABASE_URL=postgres://crm:SENHA_FORTE_DO_CRM@127.0.0.1:5432/crm npx drizzle-kit migrate
 ```
 
-> Alternativamente, rode `db:migrate` do host apontando `DATABASE_URL` pro banco da VPS.
-
-## Backup periódico na VPS (recomendado)
-
-Um cron diário guardando os últimos 7 dias:
+## Backup periódico (cron)
 
 ```bash
 mkdir -p ~/backups
-(crontab -l 2>/dev/null; echo '0 3 * * * docker exec crm-db-1 pg_dump -U crm -d crm -Fc > ~/backups/crm-$(date +\%F).dump; find ~/backups -name "crm-*.dump" -mtime +7 -delete') | crontab -
+(crontab -l 2>/dev/null; echo '0 3 * * * sudo -u postgres pg_dump -Fc crm > ~/backups/crm-$(date +\%F).dump; find ~/backups -name "crm-*.dump" -mtime +7 -delete') | crontab -
 ```
