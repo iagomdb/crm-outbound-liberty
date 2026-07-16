@@ -2,13 +2,10 @@
 
 import { useActionState, useState } from "react";
 import type { SendState } from "@/app/targets/[id]/email/actions";
+import { Button, Input, Select, Textarea, labelClasses } from "@/components/ui";
 
 type Template = { id: string; name: string; subject: string; body: string };
 type Recipient = { email: string; label: string; contactId: string | null };
-
-const field =
-  "w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900";
-const label = "text-xs font-medium text-zinc-500";
 
 /**
  * Compositor: escolhe o template → assunto/corpo entram editáveis → ajusta pro
@@ -43,14 +40,14 @@ export function EmailComposer({
     <form action={formAction} className="flex flex-col gap-3">
       {templates.length > 0 ? (
         <div>
-          <div className={label}>Template</div>
-          <select className={field} defaultValue={templates[0]?.id} onChange={(e) => pickTemplate(e.target.value)}>
+          <div className={labelClasses}>Template</div>
+          <Select defaultValue={templates[0]?.id} onChange={(e) => pickTemplate(e.target.value)}>
             {templates.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       ) : (
         <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-300">
@@ -59,8 +56,8 @@ export function EmailComposer({
       )}
 
       <div>
-        <div className={label}>Para</div>
-        <input name="to" required list="recipients" value={to} onChange={(e) => setTo(e.target.value)} className={field} placeholder="email@empresa.com.br" />
+        <div className={labelClasses}>Para</div>
+        <Input name="to" required list="recipients" value={to} onChange={(e) => setTo(e.target.value)} placeholder="email@empresa.com.br" />
         <datalist id="recipients">
           {recipients.map((r) => (
             <option key={r.email} value={r.email}>
@@ -73,23 +70,20 @@ export function EmailComposer({
       <input type="hidden" name="contactId" value={chosen?.contactId ?? ""} />
 
       <div>
-        <div className={label}>Assunto</div>
-        <input name="subject" required value={subject} onChange={(e) => setSubject(e.target.value)} className={field} />
+        <div className={labelClasses}>Assunto</div>
+        <Input name="subject" required value={subject} onChange={(e) => setSubject(e.target.value)} />
       </div>
 
       <div>
-        <div className={label}>Corpo — ajuste pro contexto da conversa antes de enviar</div>
-        <textarea name="body" required rows={16} value={body} onChange={(e) => setBody(e.target.value)} className={field} />
+        <div className={labelClasses}>Corpo — ajuste pro contexto da conversa antes de enviar</div>
+        <Textarea name="body" required rows={16} value={body} onChange={(e) => setBody(e.target.value)} />
       </div>
 
       {state?.error && <p className="text-sm text-red-600 dark:text-red-400">{state.error}</p>}
 
-      <button
-        disabled={pending}
-        className="self-start rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-60 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-      >
+      <Button type="submit" disabled={pending} className="self-start">
         {pending ? "Enviando…" : "✉️ Enviar e-mail"}
-      </button>
+      </Button>
     </form>
   );
 }

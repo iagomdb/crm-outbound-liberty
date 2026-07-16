@@ -5,16 +5,17 @@ import { deathFor, deathLabel, DEATH_CLASSES } from "@/core/death";
 import { STAGE_LABELS } from "@/core/pipeline";
 import { goldenHourLabel } from "@/core/golden-hours";
 import { fmtDateTime, fmtPhone } from "@/lib/format";
+import { Badge, ButtonLink, type BadgeTone } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
 /** Meta do playbook: bloco de discagem diário. */
 const META_DISCADAS_DIA = 30;
 
-const GH_UI: Record<string, { txt: string; cls: string }> = {
-  golden: { txt: "🔥 golden hour", cls: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" },
-  ok: { txt: "horário ok", cls: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300" },
-  ruim: { txt: "horário ruim", cls: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300" },
+const GH_UI: Record<string, { txt: string; tone: BadgeTone }> = {
+  golden: { txt: "🔥 golden hour", tone: "emerald" },
+  ok: { txt: "horário ok", tone: "neutral" },
+  ruim: { txt: "horário ruim", tone: "orange" },
 };
 
 function Stat({ label, value, meta }: { label: string; value: number; meta?: number }) {
@@ -89,14 +90,13 @@ export default async function FilaPage() {
           <p className="text-sm text-zinc-500">{total} tasks — desce de cima pra baixo, uma decisão por lead</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`rounded-full px-3 py-1 text-xs font-medium ${gh.cls}`}>{gh.txt}</span>
+          <Badge tone={gh.tone} pill className="px-3 py-1">
+            {gh.txt}
+          </Badge>
           {first && (
-            <Link
-              href={`/fila/${first.id}`}
-              className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-            >
+            <ButtonLink href={`/fila/${first.id}`} variant="primary" size="sm">
               ▶ começar
-            </Link>
+            </ButtonLink>
           )}
         </div>
       </div>

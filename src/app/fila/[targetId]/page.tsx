@@ -19,13 +19,14 @@ import { deathFor, deathLabel, DEATH_CLASSES } from "@/core/death";
 import { goldenHourLabel } from "@/core/golden-hours";
 import { addBusinessDays, DEFAULT_FOLLOWUP_BUSINESS_DAYS, toDatetimeLocal } from "@/core/tasks";
 import { activityType, mentalState, objectionType, objectiveHit } from "@/db/schema";
+import { Card, Badge, ButtonLink, type BadgeTone } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
-const GH_UI: Record<string, { txt: string; cls: string }> = {
-  golden: { txt: "🔥 golden hour — liga AGORA", cls: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" },
-  ok: { txt: "horário ok", cls: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300" },
-  ruim: { txt: "horário ruim pra ligar", cls: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300" },
+const GH_UI: Record<string, { txt: string; tone: BadgeTone }> = {
+  golden: { txt: "🔥 golden hour — liga AGORA", tone: "emerald" },
+  ok: { txt: "horário ok", tone: "neutral" },
+  ruim: { txt: "horário ruim pra ligar", tone: "orange" },
 };
 
 const lbl = "text-xs text-zinc-500";
@@ -77,14 +78,16 @@ export default async function TaskPage({ params }: { params: Promise<{ targetId:
       </div>
 
       {/* cabeçalho de discagem */}
-      <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
+      <Card>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-xl font-semibold">{co.nomeFantasia || co.razaoSocial}</h1>
           <StageBadge stage={t.stage} />
           <span className={`text-xs ${DEATH_CLASSES[death.state].text}`}>
             tentativa nº {t.attempts + 1} · {deathLabel(death)}
           </span>
-          <span className={`ml-auto rounded-full px-3 py-1 text-xs font-medium ${gh.cls}`}>{gh.txt}</span>
+          <Badge tone={gh.tone} pill className="ml-auto px-3 py-1">
+            {gh.txt}
+          </Badge>
         </div>
         <p className="text-sm text-zinc-500">
           {co.razaoSocial} · {[co.municipio, co.uf].filter(Boolean).join(" - ") || "—"} · {t.campaign.name}
@@ -102,12 +105,9 @@ export default async function TaskPage({ params }: { params: Promise<{ targetId:
               {p.who && <span className="ml-1.5 text-xs font-normal opacity-70">({p.who})</span>}
             </a>
           ))}
-          <Link
-            href={`/targets/${t.id}/email?back=fila`}
-            className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
-          >
+          <ButtonLink href={`/targets/${t.id}/email?back=fila`} variant="secondary" className="rounded-lg px-4 py-2">
             ✉️ e-mail
-          </Link>
+          </ButtonLink>
         </div>
 
         <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
@@ -136,7 +136,7 @@ export default async function TaskPage({ params }: { params: Promise<{ targetId:
             <dd>{MENTAL_LABELS[t.mentalState] ?? t.mentalState}</dd>
           </div>
         </dl>
-      </section>
+      </Card>
 
       {/* o pretexto DESTA ligação */}
       <section className="rounded-xl border-2 border-sky-300 bg-sky-50 p-5 dark:border-sky-800 dark:bg-sky-950">
@@ -157,8 +157,7 @@ export default async function TaskPage({ params }: { params: Promise<{ targetId:
       <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
         <div className="flex flex-col gap-6">
           {/* memória da última ligação */}
-          <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
-            <h2 className="mb-2 text-sm font-semibold">🧠 Onde parou (última ligação)</h2>
+          <Card title="🧠 Onde parou (última ligação)">
             {!lastCall ? (
               <p className="text-sm text-zinc-500">Nunca ligou. Começa do script: gatekeeper → decisor → hipótese.</p>
             ) : (
@@ -198,19 +197,17 @@ export default async function TaskPage({ params }: { params: Promise<{ targetId:
               </dl>
             )}
             {t.notes && <p className="mt-3 border-t border-zinc-100 pt-2 text-xs text-zinc-500 dark:border-zinc-900">obs. do alvo: {t.notes}</p>}
-          </section>
+          </Card>
 
           {/* histórico: uma linha por ligação, clique expande o registro completo */}
-          <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
-            <h2 className="mb-2 text-sm font-semibold">Histórico ({t.activities.length})</h2>
+          <Card title={`Histórico (${t.activities.length})`}>
             <ActivityHistory activities={t.activities} />
-          </section>
+          </Card>
         </div>
 
         {/* registrar → regra de ouro → próxima da fila */}
         <div className="lg:sticky lg:top-6 lg:self-start">
-          <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
-            <h2 className="mb-3 text-sm font-semibold">Registrar ligação</h2>
+          <Card title="Registrar ligação">
             <CallLogForm
               key={t.activities.length}
               action={logCallAndNext.bind(null, t.id)}
@@ -224,7 +221,7 @@ export default async function TaskPage({ params }: { params: Promise<{ targetId:
               defaultNextActionAt={toDatetimeLocal(addBusinessDays(new Date(), DEFAULT_FOLLOWUP_BUSINESS_DAYS))}
               submitLabel="Registrar → próxima da fila"
             />
-          </section>
+          </Card>
         </div>
       </div>
     </div>

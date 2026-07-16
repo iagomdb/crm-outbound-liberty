@@ -12,6 +12,7 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { DEATH_CLASSES, deathFor, deathLabel } from "@/core/death";
+import { Input } from "@/components/ui";
 
 export type BoardItem = {
   id: string;
@@ -87,11 +88,11 @@ export function KanbanBoard({
 
   return (
     <div className="flex flex-col gap-2">
-      <input
+      <Input
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="🔍 filtrar por empresa, CNPJ ou pretexto…"
-        className="w-72 rounded-md border border-zinc-300 bg-white px-2.5 py-1.5 text-sm placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-950"
+        className="w-72"
       />
       <DndContext sensors={sensors} onDragEnd={onDragEnd}>
         <div className="flex items-start gap-3 overflow-x-auto pb-2">

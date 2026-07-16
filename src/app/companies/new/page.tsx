@@ -2,12 +2,10 @@ import Link from "next/link";
 import { requireUser } from "@/auth/dal";
 import { getCampaignsWithStats } from "@/db/queries";
 import { MaskedInput } from "@/components/MaskedInput";
+import { Button, Field, Input, Select, fieldClasses } from "@/components/ui";
 import { createCompany } from "../actions";
 
 export const dynamic = "force-dynamic";
-
-const inp = "w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900";
-const lbl = "text-xs text-zinc-500";
 
 export default async function NewCompanyPage({
   searchParams,
@@ -28,66 +26,54 @@ export default async function NewCompanyPage({
       </div>
 
       <form action={createCompany} className="grid grid-cols-2 gap-3 rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="col-span-2">
-          <div className={lbl}>Razão social *</div>
-          <input name="razaoSocial" required className={inp} />
-        </div>
-        <div>
-          <div className={lbl}>CNPJ *</div>
-          <MaskedInput mask="cnpj" name="cnpj" required className={inp} />
-        </div>
-        <div>
-          <div className={lbl}>Nome fantasia</div>
-          <input name="nomeFantasia" className={inp} />
-        </div>
-        <div>
-          <div className={lbl}>Telefone 1</div>
-          <MaskedInput mask="phone" name="tel1" className={inp} />
-        </div>
-        <div>
-          <div className={lbl}>Telefone 2</div>
-          <MaskedInput mask="phone" name="tel2" className={inp} />
-        </div>
-        <div>
-          <div className={lbl}>E-mail 1</div>
-          <input name="email1" className={inp} />
-        </div>
-        <div>
-          <div className={lbl}>E-mail 2</div>
-          <input name="email2" className={inp} />
-        </div>
-        <div className="col-span-2">
-          <div className={lbl}>CNAE principal</div>
-          <input name="cnaePrincipal" className={inp} />
-        </div>
-        <div>
-          <div className={lbl}>Porte</div>
-          <input name="porte" className={inp} />
-        </div>
+        <Field label="Razão social *" className="col-span-2">
+          <Input name="razaoSocial" required />
+        </Field>
+        <Field label="CNPJ *">
+          <MaskedInput mask="cnpj" name="cnpj" required className={fieldClasses} />
+        </Field>
+        <Field label="Nome fantasia">
+          <Input name="nomeFantasia" />
+        </Field>
+        <Field label="Telefone 1">
+          <MaskedInput mask="phone" name="tel1" className={fieldClasses} />
+        </Field>
+        <Field label="Telefone 2">
+          <MaskedInput mask="phone" name="tel2" className={fieldClasses} />
+        </Field>
+        <Field label="E-mail 1">
+          <Input name="email1" />
+        </Field>
+        <Field label="E-mail 2">
+          <Input name="email2" />
+        </Field>
+        <Field label="CNAE principal" className="col-span-2">
+          <Input name="cnaePrincipal" />
+        </Field>
+        <Field label="Porte">
+          <Input name="porte" />
+        </Field>
         <div className="grid grid-cols-2 gap-2">
-          <div>
-            <div className={lbl}>UF</div>
-            <MaskedInput mask="uf" name="uf" maxLength={2} className={inp} />
-          </div>
-          <div>
-            <div className={lbl}>Município</div>
-            <input name="municipio" className={inp} />
-          </div>
+          <Field label="UF">
+            <MaskedInput mask="uf" name="uf" maxLength={2} className={fieldClasses} />
+          </Field>
+          <Field label="Município">
+            <Input name="municipio" />
+          </Field>
         </div>
-        <div className="col-span-2">
-          <div className={lbl}>Adicionar à campanha</div>
-          <select name="campaignSlug" defaultValue={campaign ?? ""} className={inp}>
+        <Field label="Adicionar à campanha" className="col-span-2">
+          <Select name="campaignSlug" defaultValue={campaign ?? ""}>
             <option value="">— nenhuma (só cadastrar) —</option>
             {camps.map((c) => (
               <option key={c.id} value={c.slug ?? ""}>
                 {c.name}
               </option>
             ))}
-          </select>
-        </div>
-        <button className="col-span-2 justify-self-start rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
+          </Select>
+        </Field>
+        <Button type="submit" className="col-span-2 justify-self-start">
           Criar empresa
-        </button>
+        </Button>
       </form>
     </div>
   );

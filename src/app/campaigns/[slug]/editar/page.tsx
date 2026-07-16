@@ -3,12 +3,10 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/auth/dal";
 import { getCampaignBySlug } from "@/db/queries";
 import { ConfirmButton } from "@/components/ConfirmButton";
+import { Button, Field, Input, Select, Textarea } from "@/components/ui";
 import { updateCampaign, deleteCampaign } from "../../actions";
 
 export const dynamic = "force-dynamic";
-
-const inp = "w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900";
-const lbl = "text-xs text-zinc-500";
 
 export default async function EditCampaignPage({ params }: { params: Promise<{ slug: string }> }) {
   await requireUser();
@@ -32,39 +30,33 @@ export default async function EditCampaignPage({ params }: { params: Promise<{ s
         action={updateCampaign.bind(null, campaign.id)}
         className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950"
       >
-        <div>
-          <div className={lbl}>Nome *</div>
-          <input name="name" required defaultValue={campaign.name} className={inp} />
-        </div>
-        <div>
-          <div className={lbl}>Descrição</div>
-          <textarea name="description" rows={2} defaultValue={campaign.description ?? ""} className={inp} />
-        </div>
-        <div>
-          <div className={lbl}>Condições da oferta (travadas)</div>
-          <textarea name="offerTerms" rows={2} defaultValue={campaign.offerTerms ?? ""} className={inp} />
-        </div>
-        <div>
-          <div className={lbl}>ICP</div>
-          <textarea name="icp" rows={2} defaultValue={campaign.icp ?? ""} className={inp} />
-        </div>
+        <Field label="Nome *">
+          <Input name="name" required defaultValue={campaign.name} />
+        </Field>
+        <Field label="Descrição">
+          <Textarea name="description" rows={2} defaultValue={campaign.description ?? ""} />
+        </Field>
+        <Field label="Condições da oferta (travadas)">
+          <Textarea name="offerTerms" rows={2} defaultValue={campaign.offerTerms ?? ""} />
+        </Field>
+        <Field label="ICP">
+          <Textarea name="icp" rows={2} defaultValue={campaign.icp ?? ""} />
+        </Field>
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <div className={lbl}>Script (referência)</div>
-            <input name="scriptRef" defaultValue={campaign.scriptRef ?? ""} className={inp} />
-          </div>
-          <div>
-            <div className={lbl}>Status</div>
-            <select name="status" defaultValue={campaign.status} className={inp}>
+          <Field label="Script (referência)">
+            <Input name="scriptRef" defaultValue={campaign.scriptRef ?? ""} />
+          </Field>
+          <Field label="Status">
+            <Select name="status" defaultValue={campaign.status}>
               <option value="ativa">ativa</option>
               <option value="pausada">pausada</option>
               <option value="arquivada">arquivada</option>
-            </select>
-          </div>
+            </Select>
+          </Field>
         </div>
-        <button className="self-start rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
+        <Button type="submit" className="self-start">
           Salvar
-        </button>
+        </Button>
       </form>
 
       {/* zona de perigo */}

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/auth/dal";
 import { getCampaignBySlug, getFunnelMetrics, getQueue, getTriagemCount } from "@/db/queries";
 import { KanbanBoard, type BoardColumn, type BoardItem } from "@/components/KanbanBoard";
+import { Card, Badge, ButtonLink, type BadgeTone } from "@/components/ui";
 import { moveTarget, archiveTarget } from "./actions";
 import { goldenHourLabel } from "@/core/golden-hours";
 import { diagnose, funnelRates, pct } from "@/core/funnel";
@@ -11,10 +12,10 @@ import { fmtCnpj, fmtPhone } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-const GH_UI: Record<string, { txt: string; cls: string }> = {
-  golden: { txt: "🔥 golden hour", cls: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" },
-  ok: { txt: "horário ok", cls: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300" },
-  ruim: { txt: "horário ruim", cls: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300" },
+const GH_UI: Record<string, { txt: string; tone: BadgeTone }> = {
+  golden: { txt: "🔥 golden hour", tone: "emerald" },
+  ok: { txt: "horário ok", tone: "neutral" },
+  ruim: { txt: "horário ruim", tone: "orange" },
 };
 
 function Tile({ label, value }: { label: string; value: number }) {
@@ -82,54 +83,52 @@ export default async function CampaignBoard({ params }: { params: Promise<{ slug
             Kanban · {items.length} ativos · arraste os cards ou use &quot;mover ➜&quot; direto no card
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <Link
+        <div className="flex flex-wrap items-center gap-2">
+          {/* status, não ação — indicador do momento do dia */}
+          <Badge tone={gh.tone} pill className="px-3 py-1">
+            {gh.txt}
+          </Badge>
+          {/* separador visual entre indicador e ações */}
+          <span className="mx-1 h-5 w-px bg-zinc-200 dark:bg-zinc-800" aria-hidden />
+          {/* triagem pendente exige atenção — destaca em âmbar quando há fila */}
+          <ButtonLink
             href={`/campaigns/${slug}/triagem`}
-            className={`rounded-md border px-3 py-1 text-xs font-medium ${
+            size="sm"
+            variant="secondary"
+            className={
               triagemPendente > 0
                 ? "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300"
-                : "border-zinc-300 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
-            }`}
+                : undefined
+            }
           >
             triagem ICP{triagemPendente > 0 ? ` · ${triagemPendente}` : ""}
-          </Link>
-          <Link
-            href={`/campaigns/${slug}/fora-do-ciclo`}
-            className="rounded-md border border-zinc-300 px-3 py-1 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
-          >
+          </ButtonLink>
+          <ButtonLink href={`/campaigns/${slug}/fora-do-ciclo`} size="sm" variant="ghost">
             fora do ciclo
-          </Link>
-          <Link
-            href={`/campaigns/${slug}/aprendizado`}
-            className="rounded-md border border-zinc-300 px-3 py-1 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
-          >
+          </ButtonLink>
+          <ButtonLink href={`/campaigns/${slug}/aprendizado`} size="sm" variant="ghost">
             aprendizado
-          </Link>
-          <Link
-            href={`/companies/new?campaign=${slug}`}
-            className="rounded-md border border-zinc-300 px-3 py-1 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
-          >
-            + empresa
-          </Link>
-          <Link
-            href={`/campaigns/${slug}/editar`}
-            className="rounded-md border border-zinc-300 px-3 py-1 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
-          >
+          </ButtonLink>
+          <ButtonLink href={`/campaigns/${slug}/editar`} size="sm" variant="ghost">
             editar
-          </Link>
-          <span className={`rounded-full px-3 py-1 text-xs font-medium ${gh.cls}`}>{gh.txt}</span>
+          </ButtonLink>
+          {/* ação de criação — primária */}
+          <ButtonLink href={`/companies/new?campaign=${slug}`} size="sm" variant="primary">
+            + empresa
+          </ButtonLink>
         </div>
       </div>
 
       {/* funil por razões */}
-      <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Funil por razões</h2>
+      <Card
+        title="Funil por razões"
+        aside={
           <span className="text-xs text-zinc-400">
             hoje: {metrics.discadasHoje} discadas · {metrics.conversasHoje} conversas
           </span>
-        </div>
-        <div className="mt-3 flex items-stretch gap-1 text-center">
+        }
+      >
+        <div className="flex items-stretch gap-1 text-center">
           <Tile label="Discadas" value={metrics.discadas} />
           <Arrow rate={pct(r.conversa)} />
           <Tile label="Conversas" value={metrics.conversas} />
@@ -145,7 +144,7 @@ export default async function CampaignBoard({ params }: { params: Promise<{ slug
             </li>
           ))}
         </ul>
-      </section>
+      </Card>
 
       {/* kanban */}
       {items.length === 0 ? (

@@ -4,6 +4,7 @@ import { requireUser } from "@/auth/dal";
 import { getCampaignBySlug, getTriagemQueue } from "@/db/queries";
 import { triageCompany } from "./actions";
 import { fmtCnpj, fmtMoney } from "@/lib/format";
+import { Button } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -64,14 +65,14 @@ export default async function TriagemPage({ params }: { params: Promise<{ slug: 
                   <td className={`${td} whitespace-nowrap`}>
                     <div className="flex gap-1.5">
                       <form action={triageCompany.bind(null, c.companyId, c.targetId, true)}>
-                        <button className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-700">
+                        <Button type="submit" variant="success" size="sm">
                           fit
-                        </button>
+                        </Button>
                       </form>
                       <form action={triageCompany.bind(null, c.companyId, c.targetId, false)}>
-                        <button className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
+                        <Button type="submit" variant="secondary" size="sm">
                           fora do ICP
-                        </button>
+                        </Button>
                       </form>
                     </div>
                   </td>

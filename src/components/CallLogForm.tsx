@@ -2,23 +2,17 @@
 
 import { useState } from "react";
 import { useFormStatus } from "react-dom";
+import { Button, Input, Select, Textarea, labelClasses } from "@/components/ui";
 
 type Opt = { value: string; label: string };
 type Contact = { id: string; nome: string | null; papel: string };
 
-const field = "w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900";
-const label = "text-xs font-medium text-zinc-500";
-
 function SubmitButton({ label }: { label?: string }) {
   const { pending } = useFormStatus();
   return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-    >
+    <Button type="submit" disabled={pending}>
       {pending ? "Registrando…" : label ?? "Registrar ligação"}
-    </button>
+    </Button>
   );
 }
 
@@ -60,57 +54,57 @@ export function CallLogForm({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="col-span-2">
-          <div className={label}>Resultado (1 linha)</div>
-          <input name="outcome" className={field} placeholder="o que aconteceu" />
+          <div className={labelClasses}>Resultado (1 linha)</div>
+          <Input name="outcome" placeholder="o que aconteceu" />
         </div>
 
         <div className="col-span-2">
-          <div className={label}>Onde travou? (a frase exata onde esfriou)</div>
-          <input name="stalledAt" className={field} placeholder='ex: "manda um e-mail"' />
+          <div className={labelClasses}>Onde travou? (a frase exata onde esfriou)</div>
+          <Input name="stalledAt" placeholder='ex: "manda um e-mail"' />
         </div>
 
         <div>
-          <div className={label}>Objeção</div>
-          <select name="objection" className={field} defaultValue="nenhuma">
+          <div className={labelClasses}>Objeção</div>
+          <Select name="objection" defaultValue="nenhuma">
             {objectionOptions.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div>
-          <div className={label}>Objetivo batido</div>
-          <select name="objectiveHit" className={field} defaultValue="nenhum">
+          <div className={labelClasses}>Objetivo batido</div>
+          <Select name="objectiveHit" defaultValue="nenhum">
             {objectiveOptions.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
         <div>
-          <div className={label}>Estado mental</div>
-          <select name="mentalState" className={field} defaultValue="">
+          <div className={labelClasses}>Estado mental</div>
+          <Select name="mentalState" defaultValue="">
             <option value="">(não mexer)</option>
             {mentalOptions.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div>
-          <div className={label}>Com quem falou</div>
-          <select name="contactId" className={field} defaultValue="">
+          <div className={labelClasses}>Com quem falou</div>
+          <Select name="contactId" defaultValue="">
             <option value="">—</option>
             {contacts.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.nome || "sem nome"} ({roleLabels[c.papel] ?? c.papel})
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
 
@@ -128,46 +122,44 @@ export function CallLogForm({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="col-span-2">
-          <div className={label}>Estágio (deixe automático, ou force)</div>
-          <select name="stage" className={field} value={stage} onChange={(e) => setStage(e.target.value)}>
+          <div className={labelClasses}>Estágio (deixe automático, ou force)</div>
+          <Select name="stage" value={stage} onChange={(e) => setStage(e.target.value)}>
             <option value="">(automático — pelo resultado)</option>
             {stageOptions.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         {!isCycleEnd && (
           <>
             <div>
-              <div className={label}>Próxima ação (quando)</div>
-              <input
+              <div className={labelClasses}>Próxima ação (quando)</div>
+              <Input
                 key={isNaoAgora ? "reentrada" : "cadencia"}
                 type="datetime-local"
                 name="nextActionAt"
                 defaultValue={isNaoAgora ? undefined : defaultNextActionAt}
-                className={field}
               />
               <p className="mt-0.5 text-[10px] text-zinc-400">
                 {isNaoAgora ? "vazio ⇒ retoma em +90 dias" : "vazio ⇒ +2 dias úteis (regra de ouro)"}
               </p>
             </div>
             <div>
-              <div className={label}>Tipo</div>
-              <select name="type" className={field} defaultValue="ligacao">
+              <div className={labelClasses}>Tipo</div>
+              <Select name="type" defaultValue="ligacao">
                 {typeOptions.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="col-span-2">
-              <div className={label}>Pretexto do próximo contato (motivo novo — cadência teimosa)</div>
-              <input
+              <div className={labelClasses}>Pretexto do próximo contato (motivo novo — cadência teimosa)</div>
+              <Input
                 name="nextActionPretext"
-                className={field}
                 placeholder={isNaoAgora ? "vazio ⇒ “retomar — disse só ano que vem”" : "ex: mandar resumo de 1 página"}
               />
             </div>
@@ -185,13 +177,13 @@ export function CallLogForm({
         )}
         {stage === "perdido" && (
           <div className="col-span-2">
-            <div className={label}>Motivo da perda (obrigatório — fim de ciclo)</div>
-            <input name="lostReason" required className={field} placeholder="ex: decisor recusou — já tem escritório" />
+            <div className={labelClasses}>Motivo da perda (obrigatório — fim de ciclo)</div>
+            <Input name="lostReason" required placeholder="ex: decisor recusou — já tem escritório" />
           </div>
         )}
         <div className="col-span-2">
-          <div className={label}>Observações</div>
-          <textarea name="notes" rows={2} className={field} />
+          <div className={labelClasses}>Observações</div>
+          <Textarea name="notes" rows={2} />
         </div>
       </div>
 

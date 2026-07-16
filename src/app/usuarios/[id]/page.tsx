@@ -6,14 +6,11 @@ import { ConfirmButton } from "@/components/ConfirmButton";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
 import { fmtDateTime } from "@/lib/format";
+import { Button, Field, Input } from "@/components/ui";
 import { resetPassword, toggleActive, updateUser } from "../actions";
 
 export const dynamic = "force-dynamic";
 
-const inp = "w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900";
-const lbl = "text-xs text-zinc-500";
-const btn =
-  "justify-self-start rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200";
 const card = "flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -61,25 +58,22 @@ export default async function EditUserPage({
       <form action={updateUser} className={card}>
         <h2 className="text-sm font-semibold">Dados</h2>
         <input type="hidden" name="userId" value={u.id} />
-        <div>
-          <div className={lbl}>Nome *</div>
-          <input name="name" defaultValue={u.name} required className={inp} />
-        </div>
-        <div>
-          <div className={lbl}>Email *</div>
-          <input name="email" type="email" defaultValue={u.email} required className={inp} />
-        </div>
-        <button className={btn}>Salvar</button>
+        <Field label="Nome *">
+          <Input name="name" defaultValue={u.name} required />
+        </Field>
+        <Field label="Email *">
+          <Input name="email" type="email" defaultValue={u.email} required />
+        </Field>
+        <Button type="submit" className="justify-self-start">Salvar</Button>
       </form>
 
       <form action={resetPassword} className={card}>
         <h2 className="text-sm font-semibold">Trocar senha</h2>
         <input type="hidden" name="userId" value={u.id} />
-        <div>
-          <div className={lbl}>Nova senha * (mín. 10 caracteres)</div>
-          <input name="password" type="password" required minLength={10} autoComplete="new-password" className={inp} />
-        </div>
-        <button className={btn}>Trocar senha</button>
+        <Field label="Nova senha * (mín. 10 caracteres)">
+          <Input name="password" type="password" required minLength={10} autoComplete="new-password" />
+        </Field>
+        <Button type="submit" className="justify-self-start">Trocar senha</Button>
       </form>
 
       <form action={toggleActive} className={card}>
@@ -98,7 +92,7 @@ export default async function EditUserPage({
             Desativar usuário
           </ConfirmButton>
         ) : (
-          <button className={btn}>Reativar usuário</button>
+          <Button type="submit" className="justify-self-start">Reativar usuário</Button>
         )}
       </form>
     </div>

@@ -1,10 +1,13 @@
 import { logout } from "@/app/login/actions";
+import { Button } from "@/components/ui";
 
-/** Botão "Sair" — pronto pra encaixar no header do layout quando conectarmos o módulo. */
+/** Botão "Sair" — form + server action de logout. */
 export function LogoutButton() {
   return (
     <form action={logout}>
-      <button className="text-xs text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">Sair</button>
+      <Button type="submit" variant="ghost" size="sm">
+        Sair
+      </Button>
     </form>
   );
 }

@@ -4,12 +4,10 @@ import { requireUser } from "@/auth/dal";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
 import { fmtDate } from "@/lib/format";
+import { Button, Field, Input } from "@/components/ui";
 import { createUser } from "./actions";
 
 export const dynamic = "force-dynamic";
-
-const inp = "w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900";
-const lbl = "text-xs text-zinc-500";
 
 export default async function UsersPage() {
   const me = await requireUser();
@@ -73,21 +71,18 @@ export default async function UsersPage() {
         className="grid max-w-xl grid-cols-2 gap-3 rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950"
       >
         <h2 className="col-span-2 text-sm font-semibold">Novo usuário</h2>
-        <div>
-          <div className={lbl}>Nome *</div>
-          <input name="name" required className={inp} />
-        </div>
-        <div>
-          <div className={lbl}>Email *</div>
-          <input name="email" type="email" required className={inp} />
-        </div>
-        <div className="col-span-2">
-          <div className={lbl}>Senha * (mín. 10 caracteres)</div>
-          <input name="password" type="password" required minLength={10} autoComplete="new-password" className={inp} />
-        </div>
-        <button className="col-span-2 justify-self-start rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
+        <Field label="Nome *">
+          <Input name="name" required />
+        </Field>
+        <Field label="Email *">
+          <Input name="email" type="email" required />
+        </Field>
+        <Field label="Senha * (mín. 10 caracteres)" className="col-span-2">
+          <Input name="password" type="password" required minLength={10} autoComplete="new-password" />
+        </Field>
+        <Button type="submit" className="col-span-2 justify-self-start">
           Criar usuário
-        </button>
+        </Button>
       </form>
     </div>
   );

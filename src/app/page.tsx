@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireUser } from "@/auth/dal";
 import { getCampaignsWithStats, getDailyQueue, getTodayStats } from "@/db/queries";
 import { STAGE_LABELS, STAGE_ORDER, type Stage } from "@/core/pipeline";
+import { ButtonLink, Badge } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -34,12 +35,9 @@ export default async function Home() {
 
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Campanhas</h1>
-        <Link
-          href="/campaigns/new"
-          className="rounded-md border border-zinc-300 px-3 py-1 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
-        >
+        <ButtonLink href="/campaigns/new" size="sm" variant="primary">
           + nova carteira
-        </Link>
+        </ButtonLink>
       </div>
 
       {camps.length === 0 && (
@@ -57,19 +55,16 @@ export default async function Home() {
           >
             <div className="flex items-center justify-between">
               <h2 className="font-medium">{c.name}</h2>
-              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+              <Badge tone={c.status === "ativa" ? "emerald" : "neutral"} pill>
                 {c.status}
-              </span>
+              </Badge>
             </div>
             <p className="mt-1 text-sm text-zinc-500">{c.total} empresas</p>
             <div className="mt-3 flex flex-wrap gap-1.5">
               {STAGE_ORDER.filter((s) => c.byStage[s]).map((s) => (
-                <span
-                  key={s}
-                  className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
-                >
-                  {STAGE_LABELS[s as Stage]}: <strong className="font-semibold">{c.byStage[s]}</strong>
-                </span>
+                <Badge key={s} tone="neutral" className="px-1.5">
+                  {STAGE_LABELS[s as Stage]}: <strong className="ml-0.5 font-semibold">{c.byStage[s]}</strong>
+                </Badge>
               ))}
             </div>
           </Link>
