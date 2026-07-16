@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui";
-import { THEME_STORAGE_KEY } from "./ThemeScript";
+import { THEME_STORAGE_KEY } from "@/lib/theme";
 
 type Choice = "system" | "light" | "dark";
 

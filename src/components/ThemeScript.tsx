@@ -1,17 +1,13 @@
-// Script inline que roda durante o parse do HTML, ANTES da primeira pintura —
-// evita o "flash" de tema errado. Resolve a preferência salva (ou o sistema) e
-// escreve data-theme="dark"|"light" no <html>, que é a fonte de verdade do CSS.
-// Mantido em sincronia com ThemeToggle (mesma STORAGE_KEY e mesma lógica).
+import { headers } from "next/headers";
 
-export const THEME_STORAGE_KEY = "theme";
+// Aplica o tema salvo antes da primeira pintura, evitando "flash" de tema errado.
+// O código vive em /public/theme-init.js (arquivo estático de mesma origem). Sob a
+// CSP com nonce (ver proxy.ts, strict-dynamic), um <script src> no HTML só executa
+// se trouxer o nonce da request — então lemos de headers() e repassamos. Sem
+// async/defer, roda sincronamente durante o parse do <head>, antes de pintar.
+// Mantido em sincronia com ThemeToggle.tsx (via lib/theme.ts).
 
-const SCRIPT = `(function(){try{
-  var pref = localStorage.getItem("${THEME_STORAGE_KEY}");
-  var sys = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  var eff = (pref === "dark" || pref === "light") ? pref : sys;
-  document.documentElement.setAttribute("data-theme", eff);
-}catch(e){}})()`;
-
-export function ThemeScript() {
-  return <script dangerouslySetInnerHTML={{ __html: SCRIPT }} />;
+export async function ThemeScript() {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+  return <script src="/theme-init.js" nonce={nonce} />;
 }
