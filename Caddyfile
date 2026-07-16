@@ -1,0 +1,7 @@
+# Caddy gera e renova o certificado TLS sozinho (Let's Encrypt) pro DOMAIN.
+# Requisitos: o DNS do DOMAIN apontando pro IP da VPS, e as portas 80/443 abertas.
+{$DOMAIN} {
+	tls {$ACME_EMAIL}
+	encode gzip
+	reverse_proxy web:3000
+}
