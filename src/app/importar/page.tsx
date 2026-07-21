@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/auth/dal";
-import { Button, Field, fieldClasses } from "@/components/ui";
+import { Field, fieldClasses } from "@/components/ui";
+import { PendingButton } from "@/components/PendingButton";
 import { uploadSheet } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -35,9 +36,9 @@ export default async function ImportarPage({ searchParams }: { searchParams: Pro
         <Field label="Planilha (.xlsx)">
           <input type="file" name="file" accept=".xlsx" required className={fieldClasses} />
         </Field>
-        <Button type="submit" className="self-start">
+        <PendingButton pendingText="Enviando e analisando…" className="self-start">
           Analisar planilha
-        </Button>
+        </PendingButton>
       </form>
     </div>
   );

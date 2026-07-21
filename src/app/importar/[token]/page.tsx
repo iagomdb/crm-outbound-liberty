@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/auth/dal";
 import { getCampaignsWithStats } from "@/db/queries";
-import { Button, ButtonLink, Field, Input, Select } from "@/components/ui";
+import { ButtonLink, Field, Input, Select } from "@/components/ui";
+import { PendingButton, PendingNote } from "@/components/PendingButton";
 import { IMPORT_FIELDS, analyzeSheet, loadWorkbook, type ImportPreview, type SheetAnalysis } from "@/core/import";
 import { runImport, type MappingState } from "../actions";
 import { readMeta, readSheet, isValidToken } from "../storage";
@@ -172,11 +173,14 @@ export default async function MapeamentoPage({
           <Field label="…ou criar carteira nova com o nome">
             <Input name="newCampaignName" placeholder="ex.: Liberty Advogados SP" defaultValue={state?.newCampaignName ?? ""} />
           </Field>
-          <div className="flex gap-2 sm:col-span-2">
-            <Button type="submit" formAction={runImport.bind(null, token, true)} variant="secondary">
+          <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+            <PendingButton formAction={runImport.bind(null, token, true)} variant="secondary">
               Simular (nada é gravado)
-            </Button>
-            <Button type="submit">Importar</Button>
+            </PendingButton>
+            <PendingButton>Importar</PendingButton>
+            <PendingNote>
+              Processando a planilha — em bases grandes pode levar um minuto. Não feche nem recarregue a página.
+            </PendingNote>
           </div>
         </div>
       </form>
