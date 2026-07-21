@@ -2,6 +2,9 @@ import type { ReactNode } from "react";
 import type { TargetDetail } from "@/db/queries";
 import { OBJECTION_LABELS, OBJECTIVE_LABELS, ROLE_LABELS } from "@/core/pipeline";
 import { fmtDateTime } from "@/lib/format";
+import { Button, Input, Textarea } from "@/components/ui";
+import { ConfirmButton } from "@/components/ConfirmButton";
+import { deleteActivity, updateActivity } from "@/app/targets/[id]/crud-actions";
 
 type Activity = TargetDetail["activities"][number];
 
@@ -99,6 +102,33 @@ export function ActivityHistory({ activities }: { activities: Activity[] }) {
                 </div>
               )}
             </dl>
+
+            <div className="mb-3 ml-5 flex items-start justify-between gap-3">
+              <details className="flex-1">
+                <summary className="cursor-pointer text-xs text-sky-600 hover:underline dark:text-sky-400">
+                  corrigir registro
+                </summary>
+                <form
+                  action={updateActivity.bind(null, a.id)}
+                  className="mt-2 flex flex-col gap-2 rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900"
+                >
+                  <Input name="outcome" defaultValue={a.outcome ?? ""} placeholder="resultado em 1 linha" />
+                  <Input name="stalledAt" defaultValue={a.stalledAt ?? ""} placeholder="travou em (frase exata)" />
+                  <Textarea name="notes" defaultValue={a.notes ?? ""} placeholder="notas" rows={2} />
+                  <Button type="submit" size="sm" className="self-start">
+                    Salvar correção
+                  </Button>
+                </form>
+              </details>
+              <form action={deleteActivity.bind(null, a.id)}>
+                <ConfirmButton
+                  message="Apagar esta ligação do histórico? A tentativa é devolvida ao alvo e a reunião gerada por ela (se houver) some. Não tem volta."
+                  className="text-xs text-red-500 hover:underline"
+                >
+                  apagar ligação
+                </ConfirmButton>
+              </form>
+            </div>
           </details>
         </li>
       ))}

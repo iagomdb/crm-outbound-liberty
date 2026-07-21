@@ -1,6 +1,7 @@
 import { Card, Input, Textarea, Button, fieldClasses, labelClasses } from "@/components/ui";
 import { MaskedInput } from "@/components/MaskedInput";
-import { updateCompany } from "../crud-actions";
+import { ConfirmButton } from "@/components/ConfirmButton";
+import { deleteCompany, updateCompany } from "../crud-actions";
 import type { TargetDetail } from "@/db/queries";
 import { fmtCnpj, fmtDate, fmtMoney, fmtPhone } from "@/lib/format";
 
@@ -53,6 +54,14 @@ export function CompanySection({ co }: { co: Company }) {
           <Button type="submit" className="col-span-2 justify-self-start">
             Salvar empresa
           </Button>
+        </form>
+        <form action={deleteCompany.bind(null, co.id)} className="mt-2">
+          <ConfirmButton
+            message={`Apagar "${co.razaoSocial}" do CRM inteiro? Contatos e alvos dela em TODAS as carteiras vão junto. Não tem volta.`}
+            className="text-xs text-red-500 hover:underline"
+          >
+            apagar empresa do CRM
+          </ConfirmButton>
         </form>
       </details>
     </Card>

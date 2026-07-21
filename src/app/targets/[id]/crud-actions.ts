@@ -1,10 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { redirect } from "next/navigation";
+import { eq, sql } from "drizzle-orm";
 import { requireUser } from "@/auth/dal";
 import { getDb } from "@/db";
-import { companies, contacts, targets } from "@/db/schema";
+import { activities, campaigns, companies, contacts, meetings, targets } from "@/db/schema";
 import type { Stage } from "@/core/pipeline";
 
 const s = (v: FormDataEntryValue | null) => (typeof v === "string" ? v.trim() : "");
@@ -97,6 +98,58 @@ export async function unarchiveTarget(targetId: string) {
   revalidatePath("/", "layout");
 }
 
+/** Apaga o alvo da carteira — leva junto ligações/reuniões dele. A empresa fica cadastrada. */
+export async function deleteTarget(targetId: string) {
+  await requireUser();
+  const db = getDb();
+  const [t] = await db
+    .select({ slug: campaigns.slug })
+    .from(targets)
+    .innerJoin(campaigns, eq(targets.campaignId, campaigns.id))
+    .where(eq(targets.id, targetId));
+  await db.delete(targets).where(eq(targets.id, targetId));
+  revalidatePath("/", "layout");
+  redirect(t?.slug ? `/campaigns/${t.slug}` : "/");
+}
+
+// -------------------------------------------------- atividades (ligações)
+/** Corrige os textos de uma ligação já registrada (resultado, travou em, notas). */
+export async function updateActivity(activityId: string, fd: FormData) {
+  await requireUser();
+  const db = getDb();
+  await db
+    .update(activities)
+    .set({
+      outcome: s(fd.get("outcome")) || null,
+      stalledAt: s(fd.get("stalledAt")) || null,
+      notes: s(fd.get("notes")) || null,
+    })
+    .where(eq(activities.id, activityId));
+  revalidatePath("/", "layout");
+}
+
+/**
+ * Apaga uma ligação registrada errado: devolve a tentativa ao alvo e remove a
+ * reunião que ela tiver gerado. Estágio/estado mental não são recalculados —
+ * se a ligação errada moveu o funil, ajuste no card "Alvo".
+ */
+export async function deleteActivity(activityId: string) {
+  await requireUser();
+  const db = getDb();
+  const [act] = await db
+    .select({ targetId: activities.targetId })
+    .from(activities)
+    .where(eq(activities.id, activityId));
+  if (!act) return;
+  await db.delete(meetings).where(eq(meetings.activityId, activityId));
+  await db.delete(activities).where(eq(activities.id, activityId));
+  await db
+    .update(targets)
+    .set({ attempts: sql`greatest(${targets.attempts} - 1, 0)`, updatedAt: new Date() })
+    .where(eq(targets.id, act.targetId));
+  revalidatePath("/", "layout");
+}
+
 // -------------------------------------------------- empresa
 export async function updateCompany(companyId: string, fd: FormData) {
   await requireUser();
@@ -118,4 +171,13 @@ export async function updateCompany(companyId: string, fd: FormData) {
     })
     .where(eq(companies.id, companyId));
   revalidatePath("/", "layout");
+}
+
+/** Apaga a empresa do CRM inteiro — contatos e alvos dela em TODAS as carteiras vão junto. */
+export async function deleteCompany(companyId: string) {
+  await requireUser();
+  const db = getDb();
+  await db.delete(companies).where(eq(companies.id, companyId));
+  revalidatePath("/", "layout");
+  redirect("/");
 }
