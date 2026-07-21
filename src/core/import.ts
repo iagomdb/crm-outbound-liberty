@@ -14,8 +14,8 @@ import { companies, targets } from "../db/schema";
 // -------------------------------------------------------------- campos
 
 export const IMPORT_FIELDS = [
-  { key: "cnpj", label: "CNPJ", required: true },
-  { key: "razaoSocial", label: "Razão social", required: true },
+  { key: "cnpj", label: "CNPJ" },
+  { key: "razaoSocial", label: "Razão social / Nome", required: true },
   { key: "nomeFantasia", label: "Nome fantasia" },
   { key: "dataAbertura", label: "Data de abertura" },
   { key: "porte", label: "Porte" },
@@ -121,12 +121,12 @@ const normalizeHeader = (h: string) =>
 /** Ordem importa: os padrões mais específicos vêm primeiro ("cnae sec" antes de "cnae"). */
 const SUGGESTIONS: [RegExp, ImportField][] = [
   [/^cnpj/, "cnpj"],
-  [/razao social|^razao$/, "razaoSocial"],
+  [/razao social|^razao$|^nome$/, "razaoSocial"],
   [/fantasia/, "nomeFantasia"],
   [/abertura/, "dataAbertura"],
   [/^porte/, "porte"],
   [/cnae sec/, "cnaeSecundarios"],
-  [/cnae/, "cnaePrincipal"],
+  [/cnae|^tipo$|categoria/, "cnaePrincipal"],
   [/natureza/, "naturezaJuridica"],
   [/capital/, "capitalSocial"],
   [/tipo\s*e-?mail/, "tipoEmail"],
@@ -242,7 +242,7 @@ export function validateMapping(mapping: ColumnMapping): string[] {
 type CompanyValues = typeof companies.$inferInsert;
 
 type ExtractedRow =
-  | { rowIdx: number; ok: true; values: CompanyValues & { cnpj: string } }
+  | { rowIdx: number; ok: true; values: CompanyValues }
   | { rowIdx: number; ok: false; rawCnpj: string; razaoSocial: string };
 
 function* extractRows(ws: ExcelJS.Worksheet, headerRowIdx: number, mapping: ColumnMapping): Generator<ExtractedRow> {
@@ -254,6 +254,7 @@ function* extractRows(ws: ExcelJS.Worksheet, headerRowIdx: number, mapping: Colu
 
   const fieldCols = new Map<ImportField, number[]>();
   for (const f of IMPORT_FIELDS) fieldCols.set(f.key, colsFor(f.key));
+  const mappedCols = Object.keys(mapping).map(Number);
 
   for (let i = headerRowIdx + 1; i <= ws.rowCount; i++) {
     const row = ws.getRow(i);
@@ -274,10 +275,11 @@ function* extractRows(ws: ExcelJS.Worksheet, headerRowIdx: number, mapping: Colu
 
     const rawCnpj = val("cnpj");
     const razaoSocial = val("razaoSocial");
-    if (!rawCnpj && !razaoSocial) continue; // linha realmente vazia
+    if (mappedCols.every((c) => !cellStr(row.getCell(c).value))) continue; // linha realmente vazia
 
+    // CNPJ é opcional (leads de Google Maps não têm) — sem ele o dedup é por nome
     const cnpj = normalizeCnpj(rawCnpj);
-    if (!cnpj || !razaoSocial) {
+    if (!razaoSocial) {
       yield { rowIdx: i, ok: false, rawCnpj, razaoSocial };
       continue;
     }
@@ -328,25 +330,40 @@ export async function previewImport(
   mapping: ColumnMapping,
 ): Promise<ImportPreview> {
   const preview: ImportPreview = { read: 0, valid: 0, invalid: 0, existing: 0, skips: [] };
-  const cnpjs: string[] = [];
+  const rows: { cnpj: string | null; nameLower: string }[] = [];
 
   for (const r of extractRows(ws, headerRowIdx, mapping)) {
     preview.read++;
     if (r.ok) {
       preview.valid++;
-      cnpjs.push(r.values.cnpj);
+      rows.push({ cnpj: r.values.cnpj ?? null, nameLower: r.values.razaoSocial.toLowerCase() });
     } else {
       preview.invalid++;
       if (preview.skips.length < 10) preview.skips.push({ rowIdx: r.rowIdx, rawCnpj: r.rawCnpj, razaoSocial: r.razaoSocial });
     }
   }
 
+  // já existentes: com CNPJ o dedup é pelo CNPJ; sem, pelo nome (como no import de Maps)
   const db = getDb();
+  const cnpjs = [...new Set(rows.filter((r) => r.cnpj).map((r) => r.cnpj!))];
+  const names = [...new Set(rows.filter((r) => !r.cnpj).map((r) => r.nameLower))];
+  const foundCnpjs = new Set<string>();
+  const foundNames = new Set<string>();
   for (let i = 0; i < cnpjs.length; i += 500) {
-    const chunk = cnpjs.slice(i, i + 500);
-    const found = await db.select({ cnpj: companies.cnpj }).from(companies).where(inArray(companies.cnpj, chunk));
-    preview.existing += found.length;
+    const found = await db
+      .select({ cnpj: companies.cnpj })
+      .from(companies)
+      .where(inArray(companies.cnpj, cnpjs.slice(i, i + 500)));
+    for (const f of found) if (f.cnpj) foundCnpjs.add(f.cnpj);
   }
+  for (let i = 0; i < names.length; i += 500) {
+    const found = await db
+      .select({ nome: sql<string>`lower(${companies.razaoSocial})` })
+      .from(companies)
+      .where(inArray(sql`lower(${companies.razaoSocial})`, names.slice(i, i + 500)));
+    for (const f of found) foundNames.add(f.nome);
+  }
+  preview.existing = rows.filter((r) => (r.cnpj ? foundCnpjs.has(r.cnpj) : foundNames.has(r.nameLower))).length;
 
   return preview;
 }
@@ -387,43 +404,64 @@ export async function executeImport(
       continue;
     }
 
-    const [c] = await db
-      .insert(companies)
-      .values(r.values)
-      .onConflictDoUpdate({
-        target: companies.cnpj,
-        set: {
-          razaoSocial: keepText("razao_social"),
-          nomeFantasia: keepText("nome_fantasia"),
-          dataAbertura: keepText("data_abertura"),
-          porte: keepText("porte"),
-          cnaePrincipal: keepText("cnae_principal"),
-          cnaeSecundarios: keepArray("cnae_secundarios"),
-          naturezaJuridica: keepText("natureza_juridica"),
-          capitalSocial: keepText("capital_social"),
-          tipoEmail: keepText("tipo_email"),
-          emails: keepArray("emails"),
-          telefones: keepArray("telefones"),
-          cep: keepText("cep"),
-          uf: keepText("uf"),
-          municipio: keepText("municipio"),
-          bairro: keepText("bairro"),
-          logradouro: keepText("logradouro"),
-          numero: keepText("numero"),
-          complemento: keepText("complemento"),
-          socios: keepArray("socios"),
-          updatedAt: new Date(),
-        },
-      })
-      .returning({ id: companies.id, inserted: sql<boolean>`(xmax = 0)`, icpFit: companies.icpFit });
+    let company: { id: string; icpFit: boolean | null };
 
-    if (c.inserted) result.inserted++;
-    else result.updated++;
+    if (!r.values.cnpj) {
+      // sem CNPJ (ex.: Google Maps): dedup por nome — reusa a empresa sem sobrescrever nada
+      const [existing] = await db
+        .select({ id: companies.id, icpFit: companies.icpFit })
+        .from(companies)
+        .where(sql`lower(${companies.razaoSocial}) = ${r.values.razaoSocial.toLowerCase()}`)
+        .limit(1);
+      if (existing) {
+        company = existing;
+        result.updated++;
+      } else {
+        const [c] = await db.insert(companies).values(r.values).returning({ id: companies.id, icpFit: companies.icpFit });
+        company = c;
+        result.inserted++;
+      }
+    } else {
+      // com CNPJ: upsert MERGE — nunca sobrescreve dado preenchido com vazio
+      const [c] = await db
+        .insert(companies)
+        .values(r.values)
+        .onConflictDoUpdate({
+          target: companies.cnpj,
+          set: {
+            razaoSocial: keepText("razao_social"),
+            nomeFantasia: keepText("nome_fantasia"),
+            dataAbertura: keepText("data_abertura"),
+            porte: keepText("porte"),
+            cnaePrincipal: keepText("cnae_principal"),
+            cnaeSecundarios: keepArray("cnae_secundarios"),
+            naturezaJuridica: keepText("natureza_juridica"),
+            capitalSocial: keepText("capital_social"),
+            tipoEmail: keepText("tipo_email"),
+            emails: keepArray("emails"),
+            telefones: keepArray("telefones"),
+            cep: keepText("cep"),
+            uf: keepText("uf"),
+            municipio: keepText("municipio"),
+            bairro: keepText("bairro"),
+            logradouro: keepText("logradouro"),
+            numero: keepText("numero"),
+            complemento: keepText("complemento"),
+            socios: keepArray("socios"),
+            updatedAt: new Date(),
+          },
+        })
+        .returning({ id: companies.id, inserted: sql<boolean>`(xmax = 0)`, icpFit: companies.icpFit });
+
+      if (c.inserted) result.inserted++;
+      else result.updated++;
+      company = c;
+    }
 
     // empresa já triada como fit (em import anterior/outra carteira) pula a triagem
     const t = await db
       .insert(targets)
-      .values({ campaignId, companyId: c.id, ...(c.icpFit ? { stage: "fit" as const } : {}) })
+      .values({ campaignId, companyId: company.id, ...(company.icpFit ? { stage: "fit" as const } : {}) })
       .onConflictDoNothing({ target: [targets.campaignId, targets.companyId] })
       .returning({ id: targets.id });
     if (t.length) result.targetsCreated++;

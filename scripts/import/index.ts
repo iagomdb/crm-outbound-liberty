@@ -73,8 +73,8 @@ async function main() {
 
 function printSkips(skips: { rowIdx: number; rawCnpj: string }[]) {
   if (!skips.length) return;
-  console.log("puladas (sem CNPJ válido):");
-  skips.forEach((s) => console.log(`  linha ${s.rowIdx}: "${s.rawCnpj}"`));
+  console.log("puladas (sem razão social/nome):");
+  skips.forEach((s) => console.log(`  linha ${s.rowIdx}: cnpj "${s.rawCnpj || "vazio"}"`));
 }
 
 main()

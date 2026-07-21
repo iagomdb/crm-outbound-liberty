@@ -97,8 +97,8 @@ export default async function MapeamentoPage({
         <h1 className="text-xl font-semibold">Mapear colunas</h1>
         <p className="text-sm text-zinc-500">
           {meta?.name ?? "planilha"} · aba “{analysis.sheetName}” · {analysis.dataRowCount} linhas de dados ·
-          cabeçalho na linha {analysis.headerRowIdx}. Confira o destino de cada coluna — CNPJ e Razão social são
-          obrigatórios; o resto é opcional.
+          cabeçalho na linha {analysis.headerRowIdx}. Confira o destino de cada coluna — só a Razão social/Nome é
+          obrigatória. CNPJ é recomendado quando existir: com ele a deduplicação é exata; sem ele, é pelo nome.
         </p>
       </div>
 
@@ -113,13 +113,13 @@ export default async function MapeamentoPage({
           <p className="font-medium">Simulação (nada foi gravado)</p>
           <p className="mt-1">
             {preview.read} linhas lidas · <strong>{preview.valid} válidas</strong> · {preview.invalid} inválidas
-            (sem CNPJ/razão social) · {preview.existing} já existem no sistema e serão mescladas, sem duplicar.
+            (sem razão social/nome) · {preview.existing} já existem no sistema e serão mescladas, sem duplicar.
           </p>
           {preview.skips.length > 0 && (
             <ul className="mt-2 list-inside list-disc text-xs">
               {preview.skips.map((s) => (
                 <li key={s.rowIdx}>
-                  linha {s.rowIdx}: CNPJ “{s.rawCnpj || "vazio"}” — {s.razaoSocial || "sem razão social"}
+                  linha {s.rowIdx}: sem razão social/nome{s.rawCnpj ? ` (CNPJ “${s.rawCnpj}”)` : ""}
                 </li>
               ))}
             </ul>
@@ -203,11 +203,11 @@ function ResultView({ r }: { r: DoneResult }) {
 
       {r.skips.length > 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-          <p className="mb-1 text-sm font-medium">Linhas puladas (sem CNPJ válido ou razão social):</p>
+          <p className="mb-1 text-sm font-medium">Linhas puladas (sem razão social/nome):</p>
           <ul className="list-inside list-disc">
             {r.skips.map((s) => (
               <li key={s.rowIdx}>
-                linha {s.rowIdx}: CNPJ “{s.rawCnpj || "vazio"}” — {s.razaoSocial || "sem razão social"}
+                linha {s.rowIdx}: sem razão social/nome{s.rawCnpj ? ` (CNPJ “${s.rawCnpj}”)` : ""}
               </li>
             ))}
           </ul>
