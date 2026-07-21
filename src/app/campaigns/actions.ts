@@ -6,19 +6,11 @@ import { eq, like } from "drizzle-orm";
 import { requireUser } from "@/auth/dal";
 import { getDb } from "@/db";
 import { campaigns } from "@/db/schema";
+import { slugify } from "@/lib/slugify";
 
 const s = (v: FormDataEntryValue | null) => (typeof v === "string" ? v.trim() : "");
 
 type CampaignStatus = typeof campaigns.$inferInsert.status;
-
-/** nome → slug de URL: "Carteira Nova SP" → "carteira-nova-sp". */
-const slugify = (v: string) =>
-  v
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
 
 /** Cria uma carteira (campanha) nova e leva direto pro board dela. */
 export async function createCampaign(fd: FormData) {

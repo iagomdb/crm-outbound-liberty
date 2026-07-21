@@ -35,9 +35,14 @@ export default async function Home() {
 
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Campanhas</h1>
-        <ButtonLink href="/campaigns/new" size="sm" variant="primary">
-          + nova carteira
-        </ButtonLink>
+        <div className="flex gap-2">
+          <ButtonLink href="/importar" size="sm" variant="secondary">
+            ⬆ importar leads
+          </ButtonLink>
+          <ButtonLink href="/campaigns/new" size="sm" variant="primary">
+            + nova carteira
+          </ButtonLink>
+        </div>
       </div>
 
       {camps.length === 0 && (
