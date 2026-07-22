@@ -79,6 +79,7 @@ export async function getIcpRawData(): Promise<{
       objection: activities.objection,
       stalledAt: activities.stalledAt,
       objectiveHit: activities.objectiveHit,
+      abordagens: activities.abordagens,
     })
     .from(activities)
     .innerJoin(targets, eq(activities.targetId, targets.id))
@@ -95,6 +96,7 @@ export async function getIcpRawData(): Promise<{
     objection: r.objection,
     stalledAt: r.stalledAt,
     objectiveHit: r.objectiveHit,
+    abordagens: r.abordagens,
   }));
 
   const rawMeetings: IcpRawMeeting[] = await db
@@ -105,14 +107,14 @@ export async function getIcpRawData(): Promise<{
   return { camps, rawTargets, rawCalls, rawMeetings };
 }
 
-/** Itens do checklist da carteira, na ordem definida (pro editor e pras telas de ligação). */
+/** Itens do checklist da carteira (com variações), na ordem definida. */
 export async function getChecklistItems(campaignId: string) {
   const db = getDb();
-  return db
-    .select()
-    .from(checklistItems)
-    .where(eq(checklistItems.campaignId, campaignId))
-    .orderBy(asc(checklistItems.ordem), asc(checklistItems.createdAt));
+  return db.query.checklistItems.findMany({
+    where: (c, { eq }) => eq(c.campaignId, campaignId),
+    with: { opcoes: { orderBy: (o, { asc }) => [asc(o.ordem), asc(o.createdAt)] } },
+    orderBy: (c, { asc }) => [asc(c.ordem), asc(c.createdAt)],
+  });
 }
 
 // ---------------------------------------------------------------- roleta (randomizador de ligação)
@@ -190,7 +192,10 @@ export async function getTargetDetail(id: string) {
     with: {
       campaign: {
         with: {
-          checklistItems: { orderBy: (c, { asc }) => [asc(c.ordem), asc(c.createdAt)] },
+          checklistItems: {
+            orderBy: (c, { asc }) => [asc(c.ordem), asc(c.createdAt)],
+            with: { opcoes: { orderBy: (o, { asc }) => [asc(o.ordem), asc(o.createdAt)] } },
+          },
         },
       },
       primaryContact: true,

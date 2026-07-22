@@ -60,7 +60,11 @@ export default async function EditCampaignPage({ params }: { params: Promise<{ s
           </Field>
           <Field label="Checklist da ligação" hint="aba ✅ na tela de discagem — objetivos marcáveis, na ordem daqui">
             <ChecklistEditor
-              initialItems={items.map((i) => ({ titulo: i.titulo, descricao: i.descricao ?? "" }))}
+              initialItems={items.map((i) => ({
+                titulo: i.titulo,
+                descricao: i.descricao ?? "",
+                opcoes: i.opcoes.map((o) => o.titulo),
+              }))}
             />
           </Field>
         </div>

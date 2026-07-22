@@ -4,6 +4,7 @@ import { getIcpRawData } from "@/db/queries";
 import { OBJECTION_LABELS } from "@/core/pipeline";
 import {
   HYPOTHESIS_UI,
+  computeAbStats,
   computeCampaignStats,
   computeEvolution,
   gradeFromAvg,
@@ -206,6 +207,56 @@ export default async function IcpPage() {
           )}
         </Card>
       </div>
+
+      {/* teste A/B: qual variação de abordagem converte mais */}
+      <Card title="Teste A/B de abordagens">
+        {(() => {
+          const withAb = withData
+            .map((c) => ({ c, ab: computeAbStats(rawCalls.filter((r) => r.campaignId === c.id)) }))
+            .filter(({ ab }) => ab.length > 0);
+          if (withAb.length === 0) {
+            return (
+              <p className="text-sm text-zinc-500">
+                Aparece quando o checklist tem categorias com variações (ex.: “Abertura” com 2 versões) e você
+                seleciona qual usou durante as ligações.
+              </p>
+            );
+          }
+          return (
+            <div className="flex flex-col gap-4">
+              {withAb.map(({ c, ab }) => (
+                <div key={c.id} className="overflow-x-auto">
+                  <div className="mb-1 text-sm font-medium">{c.name}</div>
+                  <table className="w-full text-sm">
+                    <thead className="border-b border-zinc-200 dark:border-zinc-800">
+                      <tr>
+                        <th className={th}>Categoria</th>
+                        <th className={th}>Variação</th>
+                        <th className={th}>Ligações</th>
+                        <th className={th}>Falou decisor</th>
+                        <th className={th}>Reuniões</th>
+                        <th className={th}>Taxa reunião</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-900">
+                      {ab.map((s) => (
+                        <tr key={`${s.categoria}-${s.opcao}`}>
+                          <td className={td}>{s.categoria}</td>
+                          <td className={`${td} font-medium`}>{s.opcao}</td>
+                          <td className={td}>{s.ligacoes}</td>
+                          <td className={td}>{s.falouDecisor}</td>
+                          <td className={td}>{s.reunioes}</td>
+                          <td className={`${td} font-semibold`}>{fmtPct(s.taxaReuniao)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+      </Card>
 
       {/* evolução: primeiras vs últimas N ligações */}
       <Card title="Evolução (primeiras vs últimas ligações)">

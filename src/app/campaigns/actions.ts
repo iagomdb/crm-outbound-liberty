@@ -3,44 +3,16 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { eq, like } from "drizzle-orm";
-import { z } from "zod";
 import { requireUser } from "@/auth/dal";
 import { getDb } from "@/db";
-import { campaigns, checklistItems } from "@/db/schema";
+import { campaigns } from "@/db/schema";
 import { slugify } from "@/lib/slugify";
+import { replaceChecklistFromJson } from "@/core/checklist";
 
 const s = (v: FormDataEntryValue | null) => (typeof v === "string" ? v.trim() : "");
 
 type CampaignStatus = typeof campaigns.$inferInsert.status;
 
-// O editor manda os itens do checklist serializados num hidden input.
-const checklistSchema = z.array(
-  z.object({ titulo: z.string().trim().min(1), descricao: z.string().trim().optional() }),
-);
-
-/** Substitui (replace-all) os itens do checklist da carteira, preservando a ordem do editor. */
-async function replaceChecklistItems(db: ReturnType<typeof getDb>, campaignId: string, raw: string) {
-  let json: unknown;
-  try {
-    json = JSON.parse(raw || "[]");
-  } catch {
-    throw new Error("checklist inválido");
-  }
-  const parsed = checklistSchema.safeParse(json);
-  if (!parsed.success) throw new Error("checklist inválido");
-
-  await db.delete(checklistItems).where(eq(checklistItems.campaignId, campaignId));
-  if (parsed.data.length) {
-    await db.insert(checklistItems).values(
-      parsed.data.map((item, idx) => ({
-        campaignId,
-        titulo: item.titulo,
-        descricao: item.descricao || null,
-        ordem: idx,
-      })),
-    );
-  }
-}
 
 /** Cria uma carteira (campanha) nova e leva direto pro board dela. */
 export async function createCampaign(fd: FormData) {
@@ -71,7 +43,7 @@ export async function createCampaign(fd: FormData) {
     })
     .returning({ id: campaigns.id });
 
-  await replaceChecklistItems(db, created.id, s(fd.get("checklistItems")));
+  await replaceChecklistFromJson(db, created.id, s(fd.get("checklistItems")));
 
   revalidatePath("/", "layout");
   redirect(`/campaigns/${slug}`);
@@ -98,7 +70,7 @@ export async function updateCampaign(campaignId: string, fd: FormData) {
     .where(eq(campaigns.id, campaignId))
     .returning({ slug: campaigns.slug });
 
-  await replaceChecklistItems(db, campaignId, s(fd.get("checklistItems")));
+  await replaceChecklistFromJson(db, campaignId, s(fd.get("checklistItems")));
 
   revalidatePath("/", "layout");
   redirect(`/campaigns/${c.slug}`);

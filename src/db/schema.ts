@@ -138,6 +138,22 @@ export const checklistItems = pgTable(
   (t) => [index("checklist_items_campaign_idx").on(t.campaignId)],
 );
 
+// Variantes de um item do checklist (item com opções vira uma CATEGORIA:
+// na ligação escolhe-se QUAL variação foi usada — teste A/B de abordagem).
+export const checklistOptions = pgTable(
+  "checklist_options",
+  {
+    id: uuid().defaultRandom().primaryKey(),
+    itemId: uuid()
+      .notNull()
+      .references(() => checklistItems.id, { onDelete: "cascade" }),
+    titulo: text().notNull(),
+    ordem: integer().notNull().default(0),
+    ...timestamps,
+  },
+  (t) => [index("checklist_options_item_idx").on(t.itemId)],
+);
+
 // ---------------------------------------------------------------- companies (global, por CNPJ)
 export const companies = pgTable("companies", {
   id: uuid().defaultRandom().primaryKey(),
@@ -252,6 +268,8 @@ export const activities = pgTable(
     occurredAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     reachedHuman: boolean().notNull().default(false), // conta conversa, NÃO discada
     dorPercebida: integer(), // 0-4: intensidade da dor percebida NESTA ligação (null = não avaliado)
+    // variações de abordagem usadas NESTA ligação (categoria do checklist → opção escolhida)
+    abordagens: jsonb().$type<{ itemId: string; categoria: string; opcao: string }[]>(),
     durationSec: integer(),
     outcome: text(), // resultado em 1 linha
     stalledAt: text(), // onde travou (a frase exata onde esfriou)
@@ -320,8 +338,13 @@ export const campaignsRelations = relations(campaigns, ({ many }) => ({
   checklistItems: many(checklistItems),
 }));
 
-export const checklistItemsRelations = relations(checklistItems, ({ one }) => ({
+export const checklistItemsRelations = relations(checklistItems, ({ one, many }) => ({
   campaign: one(campaigns, { fields: [checklistItems.campaignId], references: [campaigns.id] }),
+  opcoes: many(checklistOptions),
+}));
+
+export const checklistOptionsRelations = relations(checklistOptions, ({ one }) => ({
+  item: one(checklistItems, { fields: [checklistOptions.itemId], references: [checklistItems.id] }),
 }));
 
 export const companiesRelations = relations(companies, ({ many }) => ({

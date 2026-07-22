@@ -2,6 +2,21 @@ import type { CallInput } from "@/core/log-call";
 import type { ObjectiveHit, Stage } from "@/core/pipeline";
 
 const str = (v: FormDataEntryValue | null) => (typeof v === "string" ? v.trim() : "");
+
+/** JSON do hidden "abordagens" (variações escolhidas no checklist) → validado. */
+function parseAbordagens(raw: string): CallInput["abordagens"] {
+  try {
+    const arr = JSON.parse(raw || "[]");
+    if (!Array.isArray(arr)) return null;
+    const clean = arr.filter(
+      (a): a is { itemId: string; categoria: string; opcao: string } =>
+        a && typeof a.itemId === "string" && typeof a.categoria === "string" && typeof a.opcao === "string",
+    );
+    return clean.length ? clean : null;
+  } catch {
+    return null;
+  }
+}
 const on = (v: FormDataEntryValue | null) => v === "on" || v === "true";
 const tri = (fd: FormData, key: string): boolean | null => (fd.get(key) == null ? null : on(fd.get(key)));
 
@@ -28,6 +43,7 @@ export function parseCallForm(formData: FormData): CallInput {
     nextActionPretext: str(formData.get("nextActionPretext")) || null,
     lostReason: str(formData.get("lostReason")) || null,
     notes: str(formData.get("notes")) || null,
+    abordagens: parseAbordagens(str(formData.get("abordagens"))),
     dorPercebida: str(formData.get("dorPercebida")) === "" ? null : Number(str(formData.get("dorPercebida"))),
     icpGrade: (str(formData.get("icpGrade")) || null) as CallInput["icpGrade"],
     tipoCobranca: (str(formData.get("tipoCobranca")) || null) as CallInput["tipoCobranca"],

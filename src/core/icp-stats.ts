@@ -81,6 +81,7 @@ export type IcpRawCall = {
   objection: string;
   stalledAt: string | null;
   objectiveHit: string;
+  abordagens: { itemId: string; categoria: string; opcao: string }[] | null;
 };
 
 export type IcpRawMeeting = { campaignId: string; targetId: string };
@@ -272,6 +273,42 @@ export function computeEvolution(calls: IcpRawCall[]): Evolution {
   };
 
   return { n, primeiras: win(sorted.slice(0, n)), ultimas: win(sorted.slice(-n)) };
+}
+
+// -------------------------------------------------------------- teste A/B de abordagens
+
+export type AbStat = {
+  categoria: string;
+  opcao: string;
+  ligacoes: number;
+  falouDecisor: number;
+  reunioes: number;
+  taxaReuniao: number;
+};
+
+/** Compara variações de abordagem (ex.: qual abertura converte mais) nas ligações de uma carteira. */
+export function computeAbStats(calls: IcpRawCall[]): AbStat[] {
+  const map = new Map<string, AbStat>();
+  for (const c of calls) {
+    for (const a of c.abordagens ?? []) {
+      const key = `${a.categoria} ${a.opcao}`;
+      const s = map.get(key) ?? {
+        categoria: a.categoria,
+        opcao: a.opcao,
+        ligacoes: 0,
+        falouDecisor: 0,
+        reunioes: 0,
+        taxaReuniao: 0,
+      };
+      s.ligacoes++;
+      if (c.falouComDecisor) s.falouDecisor++;
+      if (c.objectiveHit === "reuniao") s.reunioes++;
+      map.set(key, s);
+    }
+  }
+  return [...map.values()]
+    .map((s) => ({ ...s, taxaReuniao: s.reunioes / s.ligacoes }))
+    .sort((a, b) => a.categoria.localeCompare(b.categoria) || b.taxaReuniao - a.taxaReuniao || b.ligacoes - a.ligacoes);
 }
 
 // -------------------------------------------------------------- frases onde morreu
