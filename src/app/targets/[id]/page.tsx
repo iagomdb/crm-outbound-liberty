@@ -85,10 +85,8 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
+      <div className="grid gap-6 lg:grid-cols-[1fr_400px] 2xl:grid-cols-[1fr_560px]">
         <div className="flex flex-col gap-6">
-          <ScriptCard script={t.campaign.script} campaignName={t.campaign.name} campaignSlug={t.campaign.slug} />
-
           <ScheduleReturnSection
             targetId={t.id}
             nextActionAt={t.nextActionAt}
@@ -116,8 +114,9 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
           </Card>
         </div>
 
-        {/* coluna direita: log de ligação */}
-        <div className="lg:sticky lg:top-6 lg:self-start">
+        {/* coluna direita: script da carteira + log de ligação */}
+        <div className="flex flex-col gap-6 lg:sticky lg:top-6 lg:self-start">
+          <ScriptCard script={t.campaign.script} campaignName={t.campaign.name} campaignSlug={t.campaign.slug} />
           <Card title="Registrar ligação">
             <CallLogForm
               key={t.activities.length}

@@ -6,7 +6,10 @@ import { StageBadge } from "@/components/StageBadge";
 import { CallLogForm } from "@/components/CallLogForm";
 import { ActivityHistory } from "@/components/ActivityHistory";
 import { ScriptCard } from "@/components/ScriptCard";
+import { ContactsSection } from "../../targets/[id]/_sections/ContactsSection";
+import { CompanySection } from "../../targets/[id]/_sections/CompanySection";
 import { logCallAndNext } from "./actions";
+import { sortearProxima } from "../../roleta/actions";
 import { fmtDateTime, fmtPhone } from "@/lib/format";
 import {
   MENTAL_LABELS,
@@ -32,9 +35,18 @@ const GH_UI: Record<string, { txt: string; tone: BadgeTone }> = {
 
 const lbl = "text-xs text-zinc-500";
 
-export default async function TaskPage({ params }: { params: Promise<{ targetId: string }> }) {
+export default async function TaskPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ targetId: string }>;
+  searchParams: Promise<{ roleta?: string }>;
+}) {
   await requireUser();
   const { targetId } = await params;
+  const { roleta } = await searchParams;
+  // modo roleta: veio de /roleta — a "próxima" é sorteada nas carteiras marcadas
+  const roletaSlugs = roleta ? roleta.split(",").filter(Boolean) : null;
   const [t, nextId] = await Promise.all([getTargetDetail(targetId), getNextInQueue(targetId)]);
   if (!t) notFound();
 
@@ -63,17 +75,31 @@ export default async function TaskPage({ params }: { params: Promise<{ targetId:
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between text-xs">
-        <Link href="/fila" className="text-zinc-400 hover:underline">
-          ← fila do dia
-        </Link>
+        {roletaSlugs ? (
+          <Link href="/roleta" className="text-zinc-400 hover:underline">
+            ← 🎲 roleta ({roletaSlugs.length} carteira{roletaSlugs.length > 1 ? "s" : ""})
+          </Link>
+        ) : (
+          <Link href="/fila" className="text-zinc-400 hover:underline">
+            ← fila do dia
+          </Link>
+        )}
         <div className="flex items-center gap-3">
           <Link href={`/targets/${t.id}`} className="text-zinc-400 hover:underline">
             ficha completa
           </Link>
-          {nextId && (
-            <Link href={`/fila/${nextId}`} className="text-zinc-400 hover:underline">
-              pular → próxima da fila
-            </Link>
+          {roletaSlugs ? (
+            <form action={sortearProxima.bind(null, roletaSlugs, t.id)}>
+              <button type="submit" className="cursor-pointer text-zinc-400 hover:underline">
+                pular → 🎲 sortear outra
+              </button>
+            </form>
+          ) : (
+            nextId && (
+              <Link href={`/fila/${nextId}`} className="text-zinc-400 hover:underline">
+                pular → próxima da fila
+              </Link>
+            )
           )}
         </div>
       </div>
@@ -155,16 +181,9 @@ export default async function TaskPage({ params }: { params: Promise<{ targetId:
         )}
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
+      {/* pitch fixo na direita; operação (registro, contatos, empresa, histórico) na esquerda */}
+      <div className="grid gap-6 lg:grid-cols-[1fr_440px] 2xl:grid-cols-[1fr_700px]">
         <div className="flex flex-col gap-6">
-          {/* o script da carteira, aberto — é a tela de discagem */}
-          <ScriptCard
-            script={t.campaign.script}
-            campaignName={t.campaign.name}
-            campaignSlug={t.campaign.slug}
-            defaultOpen
-          />
-
           {/* memória da última ligação */}
           <Card title="🧠 Onde parou (última ligação)">
             {!lastCall ? (
@@ -208,18 +227,11 @@ export default async function TaskPage({ params }: { params: Promise<{ targetId:
             {t.notes && <p className="mt-3 border-t border-zinc-100 pt-2 text-xs text-zinc-500 dark:border-zinc-900">obs. do alvo: {t.notes}</p>}
           </Card>
 
-          {/* histórico: uma linha por ligação, clique expande o registro completo */}
-          <Card title={`Histórico (${t.activities.length})`}>
-            <ActivityHistory activities={t.activities} />
-          </Card>
-        </div>
-
-        {/* registrar → regra de ouro → próxima da fila */}
-        <div className="lg:sticky lg:top-6 lg:self-start">
+          {/* registrar → regra de ouro → próxima (da fila ou sorteada) */}
           <Card title="Registrar ligação">
             <CallLogForm
               key={t.activities.length}
-              action={logCallAndNext.bind(null, t.id)}
+              action={logCallAndNext.bind(null, t.id, roletaSlugs)}
               contacts={contacts}
               stageOptions={stageOptions}
               objectionOptions={objectionOptions}
@@ -228,9 +240,23 @@ export default async function TaskPage({ params }: { params: Promise<{ targetId:
               typeOptions={typeOptions}
               roleLabels={ROLE_LABELS}
               defaultNextActionAt={toDatetimeLocal(addBusinessDays(new Date(), DEFAULT_FOLLOWUP_BUSINESS_DAYS))}
-              submitLabel="Registrar → próxima da fila"
+              submitLabel={roletaSlugs ? "Registrar → 🎲 sortear próxima" : "Registrar → próxima da fila"}
             />
           </Card>
+
+          <ContactsSection companyId={co.id} contacts={co.contacts} />
+
+          <CompanySection co={co} />
+
+          {/* histórico: uma linha por ligação, clique expande o registro completo */}
+          <Card title={`Histórico (${t.activities.length})`}>
+            <ActivityHistory activities={t.activities} />
+          </Card>
+        </div>
+
+        {/* pitch da carteira sempre visível durante a ligação */}
+        <div className="lg:sticky lg:top-6 lg:self-start">
+          <ScriptCard script={t.campaign.script} campaignName={t.campaign.name} campaignSlug={t.campaign.slug} panel />
         </div>
       </div>
     </div>

@@ -29,7 +29,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       </head>
       <body className="flex min-h-full flex-col bg-zinc-50 font-sans text-zinc-900 dark:bg-black dark:text-zinc-100">
         <header className="border-b border-zinc-200 dark:border-zinc-800">
-          <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
+          <div className="mx-auto flex w-full items-center justify-between px-6 py-3">
             <div className="flex items-center gap-4">
               <Link href="/" className="text-sm font-semibold tracking-tight">
                 CRM <span className="text-zinc-400">Outbound</span>
@@ -64,7 +64,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
             </div>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">{children}</main>
+        <main className="mx-auto w-full flex-1 px-6 py-8">{children}</main>
       </body>
     </html>
   );

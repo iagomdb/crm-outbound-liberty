@@ -41,6 +41,44 @@ export async function getCampaignBySlug(slug: string) {
   return c ?? null;
 }
 
+// ---------------------------------------------------------------- roleta (randomizador de ligação)
+
+/** Estágios que entram no sorteio: leads frescos, sem cadência em andamento. */
+const ROLETA_STAGES: Stage[] = ["novo", "fit"];
+
+export type RoletaCampaign = { id: string; name: string; slug: string | null; disponiveis: number };
+
+/** Carteiras ativas + quantos alvos "novo"/"fit" cada uma tem disponíveis pro sorteio. */
+export async function getRoletaCampaigns(): Promise<RoletaCampaign[]> {
+  const db = getDb();
+  return db
+    .select({ id: campaigns.id, name: campaigns.name, slug: campaigns.slug, disponiveis: count(targets.id) })
+    .from(campaigns)
+    .leftJoin(
+      targets,
+      and(eq(targets.campaignId, campaigns.id), isNull(targets.archivedAt), inArray(targets.stage, ROLETA_STAGES)),
+    )
+    .where(eq(campaigns.status, "ativa"))
+    .groupBy(campaigns.id)
+    .orderBy(asc(campaigns.createdAt));
+}
+
+/** Sorteia um alvo "novo"/"fit" dentro das carteiras selecionadas (slugs). */
+export async function getRandomRoletaTarget(slugs: string[], excludeId?: string): Promise<string | null> {
+  if (!slugs.length) return null;
+  const db = getDb();
+  const conds = [isNull(targets.archivedAt), inArray(targets.stage, ROLETA_STAGES), inArray(campaigns.slug, slugs)];
+  if (excludeId) conds.push(not(eq(targets.id, excludeId)));
+  const [row] = await db
+    .select({ id: targets.id })
+    .from(targets)
+    .innerJoin(campaigns, eq(targets.campaignId, campaigns.id))
+    .where(and(...conds))
+    .orderBy(sql`random()`)
+    .limit(1);
+  return row?.id ?? null;
+}
+
 /**
  * Fila de ligação de uma campanha: exclui estágios terminais, ordena por
  * próxima ação (nulls first = nunca contatado, pode ligar já) e prioridade.

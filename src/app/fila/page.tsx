@@ -93,6 +93,9 @@ export default async function FilaPage() {
           <Badge tone={gh.tone} pill className="px-3 py-1">
             {gh.txt}
           </Badge>
+          <ButtonLink href="/roleta" variant="secondary" size="sm">
+            🎲 roleta
+          </ButtonLink>
           {first && (
             <ButtonLink href={`/fila/${first.id}`} variant="primary" size="sm">
               ▶ começar
