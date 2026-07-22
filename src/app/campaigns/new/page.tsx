@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/auth/dal";
 import { Button, Field, Input, Select, Textarea } from "@/components/ui";
+import { ChecklistEditor } from "@/components/ChecklistEditor";
 import { createCampaign } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -55,16 +56,8 @@ export default async function NewCampaignPage() {
               placeholder={"# Playbook de Ligação\n\n## 1. Abertura\n> Boa tarde! ...\n\n- **negrito** pros ganchos\n- listas, títulos e citações são renderizados"}
             />
           </Field>
-          <Field
-            label="Checklist da ligação (um objetivo por linha)"
-            hint="aba ✅ na tela de discagem; linhas com # viram seção"
-          >
-            <Textarea
-              name="checklist"
-              rows={18}
-              className="font-mono text-xs"
-              placeholder={"# Roteamento\nPassar do gatekeeper\nFalar com o decisor\n# Conversa\nPegar nome do decisor\nValidar a hipótese\nAgendar reunião com data"}
-            />
+          <Field label="Checklist da ligação" hint="aba ✅ na tela de discagem — objetivos marcáveis, na ordem daqui">
+            <ChecklistEditor initialItems={[]} />
           </Field>
         </div>
         <Field label="Status" className="max-w-48">

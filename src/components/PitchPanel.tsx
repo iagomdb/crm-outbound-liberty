@@ -3,26 +3,12 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 
-// Painel da direita na tela de discagem: aba 📜 Pitch (script renderizado,
-// vem pronto do server) e aba ✅ Checklist (objetivos da ligação, marcáveis).
+// Painel das telas de ligação (fila e target): aba 📜 Pitch (script renderizado,
+// vem pronto do server) e aba ✅ Checklist (itens da carteira, marcáveis).
 // O estado dos checks é só da tela — cada empresa nova começa zerada (key por
 // target na página).
 
-type ChecklistEntry = { kind: "header" | "item"; text: string; idx: number };
-
-/** Uma linha por objetivo; linhas começando com # viram seção. */
-function parseChecklist(raw: string): ChecklistEntry[] {
-  let idx = 0;
-  return raw
-    .split("\n")
-    .map((l) => l.trim().replace(/^[-*]\s+/, ""))
-    .filter(Boolean)
-    .map((text) =>
-      text.startsWith("#")
-        ? { kind: "header" as const, text: text.replace(/^#+\s*/, ""), idx: -1 }
-        : { kind: "item" as const, text, idx: idx++ },
-    );
-}
+export type ChecklistItemView = { id: string; titulo: string; descricao: string | null };
 
 const tabClasses = (active: boolean) =>
   `cursor-pointer rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
@@ -34,34 +20,34 @@ const tabClasses = (active: boolean) =>
 export function PitchPanel({
   campaignName,
   editHref,
-  checklist,
+  items,
   hasScript,
+  contentMaxH = "max-h-[calc(100vh-10rem)]",
   children,
 }: {
   campaignName: string;
   editHref: string | null;
-  checklist: string | null;
+  items: ChecklistItemView[];
   hasScript: boolean;
+  /** altura máxima do conteúdo (a tela do target divide a coluna com o form de ligação) */
+  contentMaxH?: string;
   /** o pitch já renderizado (Markdown é server component) */
   children: ReactNode;
 }) {
   const [tab, setTab] = useState<"pitch" | "checklist">("pitch");
-  const [checked, setChecked] = useState<Set<number>>(new Set());
+  const [checked, setChecked] = useState<Set<string>>(new Set());
 
-  const entries = checklist ? parseChecklist(checklist) : [];
-  const totalItems = entries.filter((e) => e.kind === "item").length;
-
-  const toggle = (idx: number) =>
+  const toggle = (id: string) =>
     setChecked((prev) => {
       const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx);
-      else next.add(idx);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
 
   const editLink = editHref && (
     <Link href={editHref} className="text-xs text-sky-600 hover:underline dark:text-sky-400">
-      editar →
+      editar carteira →
     </Link>
   );
 
@@ -72,12 +58,12 @@ export function PitchPanel({
           📜 Pitch
         </button>
         <button type="button" className={tabClasses(tab === "checklist")} onClick={() => setTab("checklist")}>
-          ✅ Checklist{totalItems > 0 ? ` ${checked.size}/${totalItems}` : ""}
+          ✅ Checklist{items.length > 0 ? ` ${checked.size}/${items.length}` : ""}
         </button>
         <span className="ml-auto truncate text-xs text-zinc-400">{campaignName}</span>
       </div>
 
-      <div className="max-h-[calc(100vh-10rem)] overflow-y-auto p-5">
+      <div className={`${contentMaxH} overflow-y-auto p-5`}>
         {tab === "pitch" &&
           (hasScript ? (
             children
@@ -86,39 +72,36 @@ export function PitchPanel({
           ))}
 
         {tab === "checklist" &&
-          (totalItems === 0 ? (
+          (items.length === 0 ? (
             <p className="text-sm text-zinc-400">Esta carteira ainda não tem checklist. {editLink}</p>
           ) : (
-            <div className="flex flex-col gap-1">
-              {entries.map((e, i) =>
-                e.kind === "header" ? (
-                  <div
-                    key={i}
-                    className="mt-3 mb-1 text-xs font-bold uppercase tracking-wide text-zinc-500 first:mt-0"
-                  >
-                    {e.text}
-                  </div>
-                ) : (
+            <div className="flex flex-col gap-0.5">
+              {items.map((item) => {
+                const done = checked.has(item.id);
+                return (
                   <label
-                    key={i}
-                    className="flex cursor-pointer items-start gap-2.5 rounded-lg px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                    key={item.id}
+                    className="flex cursor-pointer items-start gap-2.5 rounded-lg px-2 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-900"
                   >
                     <input
                       type="checkbox"
-                      checked={checked.has(e.idx)}
-                      onChange={() => toggle(e.idx)}
+                      checked={done}
+                      onChange={() => toggle(item.id)}
                       className="mt-0.5 size-4 accent-emerald-600"
                     />
-                    <span
-                      className={`text-sm leading-relaxed ${
-                        checked.has(e.idx) ? "text-zinc-400 line-through" : ""
-                      }`}
-                    >
-                      {e.text}
+                    <span className="flex flex-col">
+                      <span className={`text-sm leading-snug ${done ? "text-zinc-400 line-through" : ""}`}>
+                        {item.titulo}
+                      </span>
+                      {item.descricao && (
+                        <span className={`text-xs leading-snug ${done ? "text-zinc-300 dark:text-zinc-600" : "text-zinc-500"}`}>
+                          {item.descricao}
+                        </span>
+                      )}
                     </span>
                   </label>
-                ),
-              )}
+                );
+              })}
               {checked.size > 0 && (
                 <button
                   type="button"

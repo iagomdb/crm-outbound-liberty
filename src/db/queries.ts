@@ -1,6 +1,6 @@
 import { and, asc, count, desc, eq, inArray, isNull, lt, not, notInArray, or, sql } from "drizzle-orm";
 import { getDb } from "./index";
-import { activities, campaigns, companies, emailTemplates, meetings, targets } from "./schema";
+import { activities, campaigns, checklistItems, companies, emailTemplates, meetings, targets } from "./schema";
 import { type Stage, TERMINAL_STAGES } from "@/core/pipeline";
 import { CYCLE_END_STAGES } from "@/core/tasks";
 import type { FunnelCounts } from "@/core/funnel";
@@ -39,6 +39,16 @@ export async function getCampaignBySlug(slug: string) {
   const db = getDb();
   const [c] = await db.select().from(campaigns).where(eq(campaigns.slug, slug));
   return c ?? null;
+}
+
+/** Itens do checklist da carteira, na ordem definida (pro editor e pras telas de ligação). */
+export async function getChecklistItems(campaignId: string) {
+  const db = getDb();
+  return db
+    .select()
+    .from(checklistItems)
+    .where(eq(checklistItems.campaignId, campaignId))
+    .orderBy(asc(checklistItems.ordem), asc(checklistItems.createdAt));
 }
 
 // ---------------------------------------------------------------- roleta (randomizador de ligação)
@@ -114,7 +124,11 @@ export async function getTargetDetail(id: string) {
   return db.query.targets.findFirst({
     where: (t, { eq }) => eq(t.id, id),
     with: {
-      campaign: true,
+      campaign: {
+        with: {
+          checklistItems: { orderBy: (c, { asc }) => [asc(c.ordem), asc(c.createdAt)] },
+        },
+      },
       primaryContact: true,
       company: {
         with: {

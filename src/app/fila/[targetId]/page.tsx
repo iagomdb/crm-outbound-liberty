@@ -261,7 +261,7 @@ export default async function TaskPage({
             key={t.id}
             campaignName={t.campaign.name}
             editHref={t.campaign.slug ? `/campaigns/${t.campaign.slug}/editar` : null}
-            checklist={t.campaign.checklist}
+            items={t.campaign.checklistItems}
             hasScript={Boolean(t.campaign.script)}
           >
             {t.campaign.script && <Markdown text={t.campaign.script} />}

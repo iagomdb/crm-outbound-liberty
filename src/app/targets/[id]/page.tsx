@@ -5,7 +5,8 @@ import { getTargetDetail } from "@/db/queries";
 import { StageBadge } from "@/components/StageBadge";
 import { CallLogForm } from "@/components/CallLogForm";
 import { ActivityHistory } from "@/components/ActivityHistory";
-import { ScriptCard } from "@/components/ScriptCard";
+import { PitchPanel } from "@/components/PitchPanel";
+import { Markdown } from "@/components/Markdown";
 import { Card, Button } from "@/components/ui";
 import { ScheduleReturnSection } from "./_sections/ScheduleReturnSection";
 import { CompanySection } from "./_sections/CompanySection";
@@ -114,9 +115,18 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
           </Card>
         </div>
 
-        {/* coluna direita: script da carteira + log de ligação */}
+        {/* coluna direita: pitch/checklist da carteira + log de ligação */}
         <div className="flex flex-col gap-6 lg:sticky lg:top-6 lg:self-start">
-          <ScriptCard script={t.campaign.script} campaignName={t.campaign.name} campaignSlug={t.campaign.slug} />
+          <PitchPanel
+            key={t.id}
+            campaignName={t.campaign.name}
+            editHref={t.campaign.slug ? `/campaigns/${t.campaign.slug}/editar` : null}
+            items={t.campaign.checklistItems}
+            hasScript={Boolean(t.campaign.script)}
+            contentMaxH="max-h-[40vh]"
+          >
+            {t.campaign.script && <Markdown text={t.campaign.script} />}
+          </PitchPanel>
           <Card title="Registrar ligação">
             <CallLogForm
               key={t.activities.length}

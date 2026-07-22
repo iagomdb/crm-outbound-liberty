@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/auth/dal";
-import { getCampaignBySlug } from "@/db/queries";
+import { getCampaignBySlug, getChecklistItems } from "@/db/queries";
 import { ConfirmButton } from "@/components/ConfirmButton";
+import { ChecklistEditor } from "@/components/ChecklistEditor";
 import { Button, Field, Input, Select, Textarea } from "@/components/ui";
 import { updateCampaign, deleteCampaign } from "../../actions";
 
@@ -13,6 +14,7 @@ export default async function EditCampaignPage({ params }: { params: Promise<{ s
   const { slug } = await params;
   const campaign = await getCampaignBySlug(slug);
   if (!campaign) notFound();
+  const items = await getChecklistItems(campaign.id);
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-5">
@@ -56,16 +58,9 @@ export default async function EditCampaignPage({ params }: { params: Promise<{ s
               placeholder={"# Playbook de Ligação\n\n## 1. Abertura\n> Boa tarde! ..."}
             />
           </Field>
-          <Field
-            label="Checklist da ligação (um objetivo por linha)"
-            hint="aba ✅ na tela de discagem; linhas com # viram seção"
-          >
-            <Textarea
-              name="checklist"
-              rows={18}
-              className="font-mono text-xs"
-              defaultValue={campaign.checklist ?? ""}
-              placeholder={"# Roteamento\nPassar do gatekeeper\nFalar com o decisor\n# Conversa\nValidar a hipótese\nAgendar reunião com data"}
+          <Field label="Checklist da ligação" hint="aba ✅ na tela de discagem — objetivos marcáveis, na ordem daqui">
+            <ChecklistEditor
+              initialItems={items.map((i) => ({ titulo: i.titulo, descricao: i.descricao ?? "" }))}
             />
           </Field>
         </div>

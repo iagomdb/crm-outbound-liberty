@@ -95,10 +95,28 @@ export const campaigns = pgTable("campaigns", {
   offerTerms: text(), // condições travadas ("só paga se recuperar", caso único)
   icp: text(), // definição do ICP dessa campanha
   script: text(), // script/pitch da carteira em markdown — renderizado na fila e no target
-  checklist: text(), // objetivos da ligação, um por linha ("#" vira seção) — aba ao lado do pitch
   status: campaignStatus().notNull().default("ativa"),
   ...timestamps,
 });
+
+// ---------------------------------------------------------------- checklist_items
+// Objetivos da ligação da carteira, um registro por item (aba ✅ ao lado do
+// pitch nas telas de discagem). Editados em bloco: o save da carteira faz
+// replace-all preservando a ordem.
+export const checklistItems = pgTable(
+  "checklist_items",
+  {
+    id: uuid().defaultRandom().primaryKey(),
+    campaignId: uuid()
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    titulo: text().notNull(),
+    descricao: text(), // detalhe opcional exibido abaixo do título
+    ordem: integer().notNull().default(0),
+    ...timestamps,
+  },
+  (t) => [index("checklist_items_campaign_idx").on(t.campaignId)],
+);
 
 // ---------------------------------------------------------------- companies (global, por CNPJ)
 export const companies = pgTable("companies", {
@@ -273,6 +291,11 @@ export const sessions = pgTable(
 // ---------------------------------------------------------------- relations (query API)
 export const campaignsRelations = relations(campaigns, ({ many }) => ({
   targets: many(targets),
+  checklistItems: many(checklistItems),
+}));
+
+export const checklistItemsRelations = relations(checklistItems, ({ one }) => ({
+  campaign: one(campaigns, { fields: [checklistItems.campaignId], references: [campaigns.id] }),
 }));
 
 export const companiesRelations = relations(companies, ({ many }) => ({
