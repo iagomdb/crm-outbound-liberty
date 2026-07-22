@@ -9,7 +9,7 @@ export default async function NewCampaignPage() {
   await requireUser();
 
   return (
-    <div className="mx-auto flex max-w-xl flex-col gap-5">
+    <div className="mx-auto flex max-w-5xl flex-col gap-5">
       <div>
         <Link href="/" className="text-xs text-zinc-400 hover:underline">
           ← campanhas
@@ -42,17 +42,31 @@ export default async function NewCampaignPage() {
             placeholder="ex.: indústria/distribuidora média, B2B, sem jurídico interno dono do contas a receber"
           />
         </Field>
-        <Field
-          label="Script / pitch da carteira (markdown)"
-          hint="aparece renderizado na Fila do Dia e na ficha do alvo, do lado do registro de ligação"
-        >
-          <Textarea
-            name="script"
-            rows={12}
-            className="font-mono text-xs"
-            placeholder={"# Playbook de Ligação\n\n## 1. Abertura\n> Boa tarde! ...\n\n- **negrito** pros ganchos\n- listas, títulos e citações são renderizados"}
-          />
-        </Field>
+        {/* pitch e checklist lado a lado — são editados juntos */}
+        <div className="grid gap-3 lg:grid-cols-2">
+          <Field
+            label="Script / pitch da carteira (markdown)"
+            hint="aba 📜 na tela de discagem, renderizado"
+          >
+            <Textarea
+              name="script"
+              rows={18}
+              className="font-mono text-xs"
+              placeholder={"# Playbook de Ligação\n\n## 1. Abertura\n> Boa tarde! ...\n\n- **negrito** pros ganchos\n- listas, títulos e citações são renderizados"}
+            />
+          </Field>
+          <Field
+            label="Checklist da ligação (um objetivo por linha)"
+            hint="aba ✅ na tela de discagem; linhas com # viram seção"
+          >
+            <Textarea
+              name="checklist"
+              rows={18}
+              className="font-mono text-xs"
+              placeholder={"# Roteamento\nPassar do gatekeeper\nFalar com o decisor\n# Conversa\nPegar nome do decisor\nValidar a hipótese\nAgendar reunião com data"}
+            />
+          </Field>
+        </div>
         <Field label="Status" className="max-w-48">
           <Select name="status" defaultValue="ativa">
             <option value="ativa">ativa</option>

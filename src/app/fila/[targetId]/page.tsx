@@ -5,7 +5,8 @@ import { getNextInQueue, getTargetDetail } from "@/db/queries";
 import { StageBadge } from "@/components/StageBadge";
 import { CallLogForm } from "@/components/CallLogForm";
 import { ActivityHistory } from "@/components/ActivityHistory";
-import { ScriptCard } from "@/components/ScriptCard";
+import { PitchPanel } from "@/components/PitchPanel";
+import { Markdown } from "@/components/Markdown";
 import { ContactsSection } from "../../targets/[id]/_sections/ContactsSection";
 import { CompanySection } from "../../targets/[id]/_sections/CompanySection";
 import { logCallAndNext } from "./actions";
@@ -254,9 +255,17 @@ export default async function TaskPage({
           </Card>
         </div>
 
-        {/* pitch da carteira sempre visível durante a ligação */}
+        {/* pitch + checklist da carteira sempre visíveis durante a ligação; key zera os checks a cada empresa */}
         <div className="lg:sticky lg:top-6 lg:self-start">
-          <ScriptCard script={t.campaign.script} campaignName={t.campaign.name} campaignSlug={t.campaign.slug} panel />
+          <PitchPanel
+            key={t.id}
+            campaignName={t.campaign.name}
+            editHref={t.campaign.slug ? `/campaigns/${t.campaign.slug}/editar` : null}
+            checklist={t.campaign.checklist}
+            hasScript={Boolean(t.campaign.script)}
+          >
+            {t.campaign.script && <Markdown text={t.campaign.script} />}
+          </PitchPanel>
         </div>
       </div>
     </div>

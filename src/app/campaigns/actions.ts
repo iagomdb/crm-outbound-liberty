@@ -35,6 +35,7 @@ export async function createCampaign(fd: FormData) {
     offerTerms: s(fd.get("offerTerms")) || null,
     icp: s(fd.get("icp")) || null,
     script: s(fd.get("script")) || null,
+    checklist: s(fd.get("checklist")) || null,
     status: (s(fd.get("status")) || "ativa") as CampaignStatus,
   });
 
@@ -57,6 +58,7 @@ export async function updateCampaign(campaignId: string, fd: FormData) {
       offerTerms: s(fd.get("offerTerms")) || null,
       icp: s(fd.get("icp")) || null,
       script: s(fd.get("script")) || null,
+      checklist: s(fd.get("checklist")) || null,
       status: (s(fd.get("status")) || "ativa") as CampaignStatus,
       updatedAt: new Date(),
     })

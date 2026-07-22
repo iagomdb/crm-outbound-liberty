@@ -15,7 +15,7 @@ export default async function EditCampaignPage({ params }: { params: Promise<{ s
   if (!campaign) notFound();
 
   return (
-    <div className="mx-auto flex max-w-xl flex-col gap-5">
+    <div className="mx-auto flex max-w-5xl flex-col gap-5">
       <div>
         <Link href={`/campaigns/${slug}`} className="text-xs text-zinc-400 hover:underline">
           ← {campaign.name}
@@ -42,18 +42,33 @@ export default async function EditCampaignPage({ params }: { params: Promise<{ s
         <Field label="ICP">
           <Textarea name="icp" rows={2} defaultValue={campaign.icp ?? ""} />
         </Field>
-        <Field
-          label="Script / pitch da carteira (markdown)"
-          hint="aparece renderizado na Fila do Dia e na ficha do alvo, do lado do registro de ligação"
-        >
-          <Textarea
-            name="script"
-            rows={16}
-            className="font-mono text-xs"
-            defaultValue={campaign.script ?? ""}
-            placeholder={"# Playbook de Ligação\n\n## 1. Abertura\n> Boa tarde! ..."}
-          />
-        </Field>
+        {/* pitch e checklist lado a lado — são editados juntos */}
+        <div className="grid gap-3 lg:grid-cols-2">
+          <Field
+            label="Script / pitch da carteira (markdown)"
+            hint="aba 📜 na tela de discagem, renderizado"
+          >
+            <Textarea
+              name="script"
+              rows={18}
+              className="font-mono text-xs"
+              defaultValue={campaign.script ?? ""}
+              placeholder={"# Playbook de Ligação\n\n## 1. Abertura\n> Boa tarde! ..."}
+            />
+          </Field>
+          <Field
+            label="Checklist da ligação (um objetivo por linha)"
+            hint="aba ✅ na tela de discagem; linhas com # viram seção"
+          >
+            <Textarea
+              name="checklist"
+              rows={18}
+              className="font-mono text-xs"
+              defaultValue={campaign.checklist ?? ""}
+              placeholder={"# Roteamento\nPassar do gatekeeper\nFalar com o decisor\n# Conversa\nValidar a hipótese\nAgendar reunião com data"}
+            />
+          </Field>
+        </div>
         <Field label="Status" className="max-w-48">
           <Select name="status" defaultValue={campaign.status}>
             <option value="ativa">ativa</option>

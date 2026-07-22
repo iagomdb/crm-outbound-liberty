@@ -95,6 +95,7 @@ export const campaigns = pgTable("campaigns", {
   offerTerms: text(), // condições travadas ("só paga se recuperar", caso único)
   icp: text(), // definição do ICP dessa campanha
   script: text(), // script/pitch da carteira em markdown — renderizado na fila e no target
+  checklist: text(), // objetivos da ligação, um por linha ("#" vira seção) — aba ao lado do pitch
   status: campaignStatus().notNull().default("ativa"),
   ...timestamps,
 });

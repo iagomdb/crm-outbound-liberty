@@ -9,14 +9,11 @@ export function ScriptCard({
   campaignName,
   campaignSlug,
   defaultOpen = false,
-  panel = false,
 }: {
   script: string | null;
   campaignName: string;
   campaignSlug: string | null;
   defaultOpen?: boolean;
-  /** painel fixo (coluna própria, sempre aberto, scroll interno) em vez de card recolhível */
-  panel?: boolean;
 }) {
   if (!script) {
     return (
@@ -27,19 +24,6 @@ export function ScriptCard({
             definir script →
           </Link>
         )}
-      </div>
-    );
-  }
-
-  if (panel) {
-    return (
-      <div className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="border-b border-zinc-100 px-5 py-3 text-sm font-semibold dark:border-zinc-900">
-          📜 Script <span className="ml-1 font-normal text-zinc-400">{campaignName}</span>
-        </div>
-        <div className="max-h-[calc(100vh-8rem)] overflow-y-auto p-5">
-          <Markdown text={script} />
-        </div>
       </div>
     );
   }
