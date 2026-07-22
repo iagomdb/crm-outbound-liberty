@@ -42,18 +42,24 @@ export default async function NewCampaignPage() {
             placeholder="ex.: indústria/distribuidora média, B2B, sem jurídico interno dono do contas a receber"
           />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Script (referência)">
-            <Input name="scriptRef" placeholder="docs/cold-call-recuperacao-credito-v2.md" />
-          </Field>
-          <Field label="Status">
-            <Select name="status" defaultValue="ativa">
-              <option value="ativa">ativa</option>
-              <option value="pausada">pausada</option>
-              <option value="arquivada">arquivada</option>
-            </Select>
-          </Field>
-        </div>
+        <Field
+          label="Script / pitch da carteira (markdown)"
+          hint="aparece renderizado na Fila do Dia e na ficha do alvo, do lado do registro de ligação"
+        >
+          <Textarea
+            name="script"
+            rows={12}
+            className="font-mono text-xs"
+            placeholder={"# Playbook de Ligação\n\n## 1. Abertura\n> Boa tarde! ...\n\n- **negrito** pros ganchos\n- listas, títulos e citações são renderizados"}
+          />
+        </Field>
+        <Field label="Status" className="max-w-48">
+          <Select name="status" defaultValue="ativa">
+            <option value="ativa">ativa</option>
+            <option value="pausada">pausada</option>
+            <option value="arquivada">arquivada</option>
+          </Select>
+        </Field>
         <Button type="submit" className="justify-self-start self-start">
           Criar carteira
         </Button>

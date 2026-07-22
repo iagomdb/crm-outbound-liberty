@@ -42,18 +42,25 @@ export default async function EditCampaignPage({ params }: { params: Promise<{ s
         <Field label="ICP">
           <Textarea name="icp" rows={2} defaultValue={campaign.icp ?? ""} />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Script (referência)">
-            <Input name="scriptRef" defaultValue={campaign.scriptRef ?? ""} />
-          </Field>
-          <Field label="Status">
-            <Select name="status" defaultValue={campaign.status}>
-              <option value="ativa">ativa</option>
-              <option value="pausada">pausada</option>
-              <option value="arquivada">arquivada</option>
-            </Select>
-          </Field>
-        </div>
+        <Field
+          label="Script / pitch da carteira (markdown)"
+          hint="aparece renderizado na Fila do Dia e na ficha do alvo, do lado do registro de ligação"
+        >
+          <Textarea
+            name="script"
+            rows={16}
+            className="font-mono text-xs"
+            defaultValue={campaign.script ?? ""}
+            placeholder={"# Playbook de Ligação\n\n## 1. Abertura\n> Boa tarde! ..."}
+          />
+        </Field>
+        <Field label="Status" className="max-w-48">
+          <Select name="status" defaultValue={campaign.status}>
+            <option value="ativa">ativa</option>
+            <option value="pausada">pausada</option>
+            <option value="arquivada">arquivada</option>
+          </Select>
+        </Field>
         <Button type="submit" className="self-start">
           Salvar
         </Button>

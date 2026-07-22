@@ -34,7 +34,7 @@ export async function createCampaign(fd: FormData) {
     description: s(fd.get("description")) || null,
     offerTerms: s(fd.get("offerTerms")) || null,
     icp: s(fd.get("icp")) || null,
-    scriptRef: s(fd.get("scriptRef")) || undefined, // vazio = default do schema (playbook v2)
+    script: s(fd.get("script")) || null,
     status: (s(fd.get("status")) || "ativa") as CampaignStatus,
   });
 
@@ -56,7 +56,7 @@ export async function updateCampaign(campaignId: string, fd: FormData) {
       description: s(fd.get("description")) || null,
       offerTerms: s(fd.get("offerTerms")) || null,
       icp: s(fd.get("icp")) || null,
-      scriptRef: s(fd.get("scriptRef")) || null,
+      script: s(fd.get("script")) || null,
       status: (s(fd.get("status")) || "ativa") as CampaignStatus,
       updatedAt: new Date(),
     })

@@ -5,6 +5,7 @@ import { getNextInQueue, getTargetDetail } from "@/db/queries";
 import { StageBadge } from "@/components/StageBadge";
 import { CallLogForm } from "@/components/CallLogForm";
 import { ActivityHistory } from "@/components/ActivityHistory";
+import { ScriptCard } from "@/components/ScriptCard";
 import { logCallAndNext } from "./actions";
 import { fmtDateTime, fmtPhone } from "@/lib/format";
 import {
@@ -156,6 +157,14 @@ export default async function TaskPage({ params }: { params: Promise<{ targetId:
 
       <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
         <div className="flex flex-col gap-6">
+          {/* o script da carteira, aberto — é a tela de discagem */}
+          <ScriptCard
+            script={t.campaign.script}
+            campaignName={t.campaign.name}
+            campaignSlug={t.campaign.slug}
+            defaultOpen
+          />
+
           {/* memória da última ligação */}
           <Card title="🧠 Onde parou (última ligação)">
             {!lastCall ? (

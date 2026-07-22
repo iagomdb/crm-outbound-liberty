@@ -5,6 +5,7 @@ import { getTargetDetail } from "@/db/queries";
 import { StageBadge } from "@/components/StageBadge";
 import { CallLogForm } from "@/components/CallLogForm";
 import { ActivityHistory } from "@/components/ActivityHistory";
+import { ScriptCard } from "@/components/ScriptCard";
 import { Card, Button } from "@/components/ui";
 import { ScheduleReturnSection } from "./_sections/ScheduleReturnSection";
 import { CompanySection } from "./_sections/CompanySection";
@@ -86,6 +87,8 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
 
       <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
         <div className="flex flex-col gap-6">
+          <ScriptCard script={t.campaign.script} campaignName={t.campaign.name} campaignSlug={t.campaign.slug} />
+
           <ScheduleReturnSection
             targetId={t.id}
             nextActionAt={t.nextActionAt}

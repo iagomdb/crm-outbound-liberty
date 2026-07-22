@@ -94,7 +94,7 @@ export const campaigns = pgTable("campaigns", {
   description: text(),
   offerTerms: text(), // condições travadas ("só paga se recuperar", caso único)
   icp: text(), // definição do ICP dessa campanha
-  scriptRef: text().default("docs/cold-call-recuperacao-credito-v2.md"),
+  script: text(), // script/pitch da carteira em markdown — renderizado na fila e no target
   status: campaignStatus().notNull().default("ativa"),
   ...timestamps,
 });

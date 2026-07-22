@@ -65,7 +65,6 @@ async function main() {
       icp:
         "Indústria/distribuidora média (não micro, não grande), B2B, sem jurídico interno dono do " +
         "contas a receber. Qualificador real = estado mental: já deu o dinheiro como perdido.",
-      scriptRef: "docs/cold-call-recuperacao-credito-v2.md",
       status: "ativa",
     })
     .returning();
