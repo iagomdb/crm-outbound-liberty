@@ -41,6 +41,11 @@ async function main() {
     nextActionPretext: "mandar resumo de 1 página",
     lostReason: null,
     notes: null,
+    dorPercebida: 3,
+    icpGrade: "B",
+    tipoCobranca: "cobranca_interna",
+    faixaClientes: null,
+    portePercebido: null,
   });
   const [after1] = await db.select().from(targets).where(eq(targets.id, t.id));
   assert(after1.attempts === before.attempts + 1, `attempts ${before.attempts} → ${after1.attempts}`);
@@ -72,6 +77,11 @@ async function main() {
     nextActionPretext: null,
     lostReason: null,
     notes: null,
+    dorPercebida: null,
+    icpGrade: null,
+    tipoCobranca: null,
+    faixaClientes: null,
+    portePercebido: null,
   });
   const [after2] = await db.select().from(targets).where(eq(targets.id, t.id));
   assert(after2.stage === "reuniao_agendada", `estágio = reuniao_agendada (${after2.stage})`);

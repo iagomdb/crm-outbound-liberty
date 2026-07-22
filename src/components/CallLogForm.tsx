@@ -3,6 +3,13 @@
 import { useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Button, Input, Select, Textarea, labelClasses } from "@/components/ui";
+import {
+  COBRANCA_LABELS,
+  DOR_LABELS,
+  FAIXA_CLIENTES_LABELS,
+  ICP_GRADE_LABELS,
+  PORTE_PERCEBIDO_LABELS,
+} from "@/core/icp-stats";
 
 type Opt = { value: string; label: string };
 type Contact = { id: string; nome: string | null; papel: string };
@@ -107,6 +114,70 @@ export function CallLogForm({
           </Select>
         </div>
       </div>
+
+      {/* leitura de mercado: alimenta as estatísticas de ICP por segmento — tudo opcional */}
+      <details className="rounded-md border border-zinc-200 dark:border-zinc-800">
+        <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-900">
+          📊 Leitura de mercado (ICP)
+        </summary>
+        <div className="grid grid-cols-2 gap-3 border-t border-zinc-100 p-3 dark:border-zinc-900">
+          <div className="col-span-2">
+            <div className={labelClasses}>Dor percebida (tamanho da dor, não interesse)</div>
+            <Select name="dorPercebida" defaultValue="">
+              <option value="">— não avaliado —</option>
+              {Object.entries(DOR_LABELS).map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="col-span-2">
+            <div className={labelClasses}>Qualidade do ICP (potencial, mesmo que rejeite)</div>
+            <Select name="icpGrade" defaultValue="">
+              <option value="">— não avaliado —</option>
+              {Object.entries(ICP_GRADE_LABELS).map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="col-span-2">
+            <div className={labelClasses}>Como resolve inadimplência?</div>
+            <Select name="tipoCobranca" defaultValue="">
+              <option value="">— não descoberto —</option>
+              {Object.entries(COBRANCA_LABELS).map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <div className={labelClasses}>Base de clientes</div>
+            <Select name="faixaClientes" defaultValue="">
+              <option value="">—</option>
+              {Object.entries(FAIXA_CLIENTES_LABELS).map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <div className={labelClasses}>Porte percebido</div>
+            <Select name="portePercebido" defaultValue="">
+              <option value="">—</option>
+              {Object.entries(PORTE_PERCEBIDO_LABELS).map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </div>
+      </details>
 
       <div className="flex flex-wrap gap-4 text-sm">
         <label className="flex items-center gap-1.5">

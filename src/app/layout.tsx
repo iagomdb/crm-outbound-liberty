@@ -42,6 +42,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                   <Link href="/agenda" className={navLink}>
                     Agenda
                   </Link>
+                  <Link href="/icp" className={navLink}>
+                    ICP
+                  </Link>
                   <Link href="/templates" className={navLink}>
                     Templates
                   </Link>

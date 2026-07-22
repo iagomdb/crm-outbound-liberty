@@ -67,6 +67,26 @@ export const objectionType = pgEnum("objection_type", [
   "outra",
 ]);
 
+// ---- campos de estatística de ICP (validação de hipótese de mercado por segmento)
+
+/** Qualidade do ICP percebida pelo vendedor — mede potencial, mesmo que rejeite a ligação. */
+export const icpGrade = pgEnum("icp_grade", ["A", "B", "C", "D"]);
+
+/** Como a empresa resolve inadimplência hoje. */
+export const cobrancaType = pgEnum("cobranca_type", [
+  "nao_possui",
+  "cobranca_interna",
+  "juridico_interno",
+  "escritorio_terceirizado",
+  "nao_soube",
+]);
+
+/** Base de clientes estimada (se descoberto na conversa). */
+export const faixaClientes = pgEnum("faixa_clientes", ["ate_50", "de_51_200", "de_201_500", "mais_500"]);
+
+/** Porte percebido na conversa (não precisa ser preciso — é pra análise). */
+export const portePercebido = pgEnum("porte_percebido", ["micro", "pequena", "media", "grande"]);
+
 export const meetingStatus = pgEnum("meeting_status", [
   "agendada",
   "realizada",
@@ -143,6 +163,10 @@ export const companies = pgTable("companies", {
   socios: jsonb().$type<{ nome: string; qualificacao?: string }[]>().notNull().default(emptyJsonArray),
   source: text().default("consultas.plus"),
   icpFit: boolean(), // null = não triado; true/false = decisão de triagem de ICP
+  // descobertos na conversa (estatística de ICP) — null = não descoberto ainda
+  tipoCobranca: cobrancaType(), // como resolve inadimplência hoje
+  faixaClientes: faixaClientes(), // base de clientes estimada
+  portePercebido: portePercebido(), // porte percebido pelo vendedor
   notes: text(),
   ...timestamps,
 });
@@ -190,6 +214,7 @@ export const targets = pgTable(
       .references(() => companies.id, { onDelete: "cascade" }),
     stage: targetStage().notNull().default("novo"),
     mentalState: mentalState().notNull().default("desconhecido"),
+    icpGrade: icpGrade(), // A-D: qualidade do ICP percebida (null = não avaliado)
     primaryContactId: uuid().references(() => contacts.id, { onDelete: "set null" }), // o decisor
     attempts: integer().notNull().default(0), // nº de contatos (cadência)
     lastContactAt: timestamp({ withTimezone: true }),
@@ -226,6 +251,7 @@ export const activities = pgTable(
     type: activityType().notNull().default("ligacao"),
     occurredAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     reachedHuman: boolean().notNull().default(false), // conta conversa, NÃO discada
+    dorPercebida: integer(), // 0-4: intensidade da dor percebida NESTA ligação (null = não avaliado)
     durationSec: integer(),
     outcome: text(), // resultado em 1 linha
     stalledAt: text(), // onde travou (a frase exata onde esfriou)

@@ -9,6 +9,10 @@ type DB = PostgresJsDatabase<typeof schema>;
 type ActivityType = (typeof schema.activityType.enumValues)[number];
 type ObjectionType = (typeof schema.objectionType.enumValues)[number];
 type MentalStateT = (typeof schema.mentalState.enumValues)[number];
+type IcpGradeT = (typeof schema.icpGrade.enumValues)[number];
+type CobrancaT = (typeof schema.cobrancaType.enumValues)[number];
+type FaixaClientesT = (typeof schema.faixaClientes.enumValues)[number];
+type PortePercebidoT = (typeof schema.portePercebido.enumValues)[number];
 
 export type CallInput = {
   reachedHuman: boolean;
@@ -27,6 +31,12 @@ export type CallInput = {
   nextActionPretext: string | null;
   lostReason: string | null;
   notes: string | null;
+  // leitura de mercado (estatística de ICP) — tudo opcional, null = não avaliado
+  dorPercebida: number | null;
+  icpGrade: IcpGradeT | null;
+  tipoCobranca: CobrancaT | null;
+  faixaClientes: FaixaClientesT | null;
+  portePercebido: PortePercebidoT | null;
   now?: Date;
 };
 
@@ -41,7 +51,7 @@ export async function recordCall(db: DB, targetId: string, input: CallInput) {
   const now = input.now ?? new Date();
 
   const [cur] = await db
-    .select({ stage: schema.targets.stage })
+    .select({ stage: schema.targets.stage, companyId: schema.targets.companyId })
     .from(schema.targets)
     .where(eq(schema.targets.id, targetId));
 
@@ -74,6 +84,7 @@ export async function recordCall(db: DB, targetId: string, input: CallInput) {
       objectionIsReflexo: input.objectionIsReflexo,
       hypothesisLanded: input.hypothesisLanded,
       objectiveHit: input.objectiveHit,
+      dorPercebida: input.dorPercebida,
       goldenHour: isGoldenHour(now),
       nextActionAt: task.nextActionAt,
       nextActionPretext: task.nextActionPretext,
@@ -95,9 +106,23 @@ export async function recordCall(db: DB, targetId: string, input: CallInput) {
       ...(input.objectiveHit === "email_nominal" ? { wonEmailNominal: true } : {}),
       ...(input.contactId ? { primaryContactId: input.contactId } : {}),
       ...(input.mentalState ? { mentalState: input.mentalState } : {}),
+      ...(input.icpGrade ? { icpGrade: input.icpGrade } : {}),
       ...(newStage === "perdido" ? { lostReason: input.lostReason || "não informado" } : {}),
     })
     .where(eq(schema.targets.id, targetId));
+
+  // fatos da empresa descobertos na conversa — só grava o que veio preenchido
+  if (cur?.companyId && (input.tipoCobranca || input.faixaClientes || input.portePercebido)) {
+    await db
+      .update(schema.companies)
+      .set({
+        ...(input.tipoCobranca ? { tipoCobranca: input.tipoCobranca } : {}),
+        ...(input.faixaClientes ? { faixaClientes: input.faixaClientes } : {}),
+        ...(input.portePercebido ? { portePercebido: input.portePercebido } : {}),
+        updatedAt: now,
+      })
+      .where(eq(schema.companies.id, cur.companyId));
+  }
 
   if (input.objectiveHit === "reuniao" && input.nextActionAt) {
     await db

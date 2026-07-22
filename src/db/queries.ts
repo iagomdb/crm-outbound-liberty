@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, inArray, isNull, lt, not, notInArray, or, sql } from "drizzle-orm";
 import { getDb } from "./index";
-import { activities, campaigns, checklistItems, companies, emailTemplates, meetings, targets } from "./schema";
+import { activities, campaigns, checklistItems, companies, contacts, emailTemplates, meetings, targets } from "./schema";
+import type { IcpRawCall, IcpRawMeeting, IcpRawTarget } from "@/core/icp-stats";
 import { type Stage, TERMINAL_STAGES } from "@/core/pipeline";
 import { CYCLE_END_STAGES } from "@/core/tasks";
 import type { FunnelCounts } from "@/core/funnel";
@@ -39,6 +40,69 @@ export async function getCampaignBySlug(slug: string) {
   const db = getDb();
   const [c] = await db.select().from(campaigns).where(eq(campaigns.slug, slug));
   return c ?? null;
+}
+
+// ---------------------------------------------------------------- estatísticas de ICP
+
+/** Linhas cruas pro dashboard de ICP (o cálculo fica em core/icp-stats.ts). */
+export async function getIcpRawData(): Promise<{
+  camps: { id: string; name: string; slug: string | null; status: string }[];
+  rawTargets: IcpRawTarget[];
+  rawCalls: IcpRawCall[];
+  rawMeetings: IcpRawMeeting[];
+}> {
+  const db = getDb();
+
+  const camps = await db
+    .select({ id: campaigns.id, name: campaigns.name, slug: campaigns.slug, status: campaigns.status })
+    .from(campaigns)
+    .orderBy(asc(campaigns.createdAt));
+
+  const rawTargets: IcpRawTarget[] = await db
+    .select({
+      targetId: targets.id,
+      campaignId: targets.campaignId,
+      icpGrade: targets.icpGrade,
+      tipoCobranca: companies.tipoCobranca,
+    })
+    .from(targets)
+    .innerJoin(companies, eq(targets.companyId, companies.id));
+
+  const callRows = await db
+    .select({
+      targetId: activities.targetId,
+      campaignId: targets.campaignId,
+      occurredAt: activities.occurredAt,
+      reachedHuman: activities.reachedHuman,
+      dorPercebida: activities.dorPercebida,
+      papel: contacts.papel,
+      objection: activities.objection,
+      stalledAt: activities.stalledAt,
+      objectiveHit: activities.objectiveHit,
+    })
+    .from(activities)
+    .innerJoin(targets, eq(activities.targetId, targets.id))
+    .leftJoin(contacts, eq(activities.contactId, contacts.id))
+    .where(eq(activities.type, "ligacao"));
+
+  const rawCalls: IcpRawCall[] = callRows.map((r) => ({
+    targetId: r.targetId,
+    campaignId: r.campaignId,
+    occurredAt: r.occurredAt,
+    reachedHuman: r.reachedHuman,
+    dorPercebida: r.dorPercebida,
+    falouComDecisor: r.papel === "decisor",
+    objection: r.objection,
+    stalledAt: r.stalledAt,
+    objectiveHit: r.objectiveHit,
+  }));
+
+  const rawMeetings: IcpRawMeeting[] = await db
+    .select({ campaignId: targets.campaignId, targetId: meetings.targetId })
+    .from(meetings)
+    .innerJoin(targets, eq(meetings.targetId, targets.id));
+
+  return { camps, rawTargets, rawCalls, rawMeetings };
 }
 
 /** Itens do checklist da carteira, na ordem definida (pro editor e pras telas de ligação). */

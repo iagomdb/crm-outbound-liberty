@@ -28,6 +28,11 @@ export function parseCallForm(formData: FormData): CallInput {
     nextActionPretext: str(formData.get("nextActionPretext")) || null,
     lostReason: str(formData.get("lostReason")) || null,
     notes: str(formData.get("notes")) || null,
+    dorPercebida: str(formData.get("dorPercebida")) === "" ? null : Number(str(formData.get("dorPercebida"))),
+    icpGrade: (str(formData.get("icpGrade")) || null) as CallInput["icpGrade"],
+    tipoCobranca: (str(formData.get("tipoCobranca")) || null) as CallInput["tipoCobranca"],
+    faixaClientes: (str(formData.get("faixaClientes")) || null) as CallInput["faixaClientes"],
+    portePercebido: (str(formData.get("portePercebido")) || null) as CallInput["portePercebido"],
     now: new Date(),
   };
 }
