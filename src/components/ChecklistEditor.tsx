@@ -13,6 +13,10 @@ export type ChecklistDraft = { titulo: string; descricao: string; opcoes: string
 const btn =
   "cursor-pointer rounded px-1.5 py-0.5 text-xs text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-30 disabled:cursor-default dark:hover:bg-zinc-800 dark:hover:text-zinc-100";
 
+// textos longos (ex.: a fala inteira de uma abertura) precisam aparecer por
+// completo: textarea que cresce com o conteúdo (field-sizing: content)
+const growField = "resize-none [field-sizing:content]";
+
 export function ChecklistEditor({ initialItems }: { initialItems: ChecklistDraft[] }) {
   const [items, setItems] = useState<ChecklistDraft[]>(initialItems);
 
@@ -57,28 +61,31 @@ export function ChecklistEditor({ initialItems }: { initialItems: ChecklistDraft
         <div key={i} className="flex items-start gap-2 rounded-lg border border-zinc-200 p-2 dark:border-zinc-800">
           <span className="mt-2 w-5 text-right text-xs tabular-nums text-zinc-400">{i + 1}.</span>
           <div className="flex flex-1 flex-col gap-1.5">
-            <input
+            <textarea
+              rows={1}
               value={item.titulo}
               onChange={(e) => patch(i, { titulo: e.target.value })}
               placeholder="objetivo ou categoria (ex.: Abertura)"
-              className={fieldClasses}
+              className={`${fieldClasses} ${growField}`}
             />
-            <input
+            <textarea
+              rows={1}
               value={item.descricao}
               onChange={(e) => patch(i, { descricao: e.target.value })}
               placeholder="detalhe opcional"
-              className={`${fieldClasses} text-xs`}
+              className={`${fieldClasses} ${growField} text-xs`}
             />
 
             {/* variações: transformam o item em categoria de escolha única */}
             {item.opcoes.map((o, oi) => (
               <div key={oi} className="ml-4 flex items-center gap-1.5">
                 <span className="text-xs text-zinc-400">◦</span>
-                <input
+                <textarea
+                  rows={1}
                   value={o}
                   onChange={(e) => setOpcao(i, oi, e.target.value)}
                   placeholder={`variação ${oi + 1} (ex.: Abertura direta)`}
-                  className={`${fieldClasses} text-xs`}
+                  className={`${fieldClasses} ${growField} text-xs`}
                 />
                 <button
                   type="button"
