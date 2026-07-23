@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/auth/dal";
-import { getNextInQueue, getTargetDetail } from "@/db/queries";
+import { getNextInQueue, getTargetDetail, getTodayStats } from "@/db/queries";
 import { StageBadge } from "@/components/StageBadge";
 import { CallLogForm } from "@/components/CallLogForm";
 import { ActivityHistory } from "@/components/ActivityHistory";
@@ -51,7 +51,11 @@ export default async function TaskPage({
   const { roleta } = await searchParams;
   // modo roleta: veio de /roleta — a "próxima" é sorteada nas carteiras marcadas
   const roletaSlugs = roleta ? roleta.split(",").filter(Boolean) : null;
-  const [t, nextId] = await Promise.all([getTargetDetail(targetId), getNextInQueue(targetId)]);
+  const [t, nextId, hoje] = await Promise.all([
+    getTargetDetail(targetId),
+    getNextInQueue(targetId),
+    getTodayStats(),
+  ]);
   if (!t) notFound();
 
   const co = t.company;
@@ -89,6 +93,12 @@ export default async function TaskPage({
           </Link>
         )}
         <div className="flex items-center gap-3">
+          {/* contador GERAL do dia — soma todas as carteiras (essencial no modo roleta) */}
+          <span className="tabular-nums text-zinc-500">
+            hoje: <strong className="text-zinc-900 dark:text-zinc-100">{hoje.discadas}</strong> discadas ·{" "}
+            <strong className="text-zinc-900 dark:text-zinc-100">{hoje.conversas}</strong> conversas ·{" "}
+            <strong className="text-zinc-900 dark:text-zinc-100">{hoje.reunioes}</strong> reuniões
+          </span>
           <Link href={`/targets/${t.id}`} className="text-zinc-400 hover:underline">
             ficha completa
           </Link>
