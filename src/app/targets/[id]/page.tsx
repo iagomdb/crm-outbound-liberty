@@ -7,7 +7,7 @@ import { CallLogForm } from "@/components/CallLogForm";
 import { ActivityHistory } from "@/components/ActivityHistory";
 import { PitchPanel } from "@/components/PitchPanel";
 import { Markdown } from "@/components/Markdown";
-import { Card, Button } from "@/components/ui";
+import { Card, Button, ButtonLink } from "@/components/ui";
 import { ScheduleReturnSection } from "./_sections/ScheduleReturnSection";
 import { CompanySection } from "./_sections/CompanySection";
 import { ContactsSection } from "./_sections/ContactsSection";
@@ -68,6 +68,9 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
           <span className={`text-xs ${DEATH_CLASSES[death.state].text}`}>
             {t.attempts} tent · {death.daysStalled}d parado · {deathLabel(death)}
           </span>
+          <ButtonLink href={`/targets/${t.id}/email`} variant="secondary" size="sm" className="ml-auto">
+            ✉️ e-mail
+          </ButtonLink>
         </div>
         <p className="text-sm text-zinc-500">{co.razaoSocial}</p>
       </div>
