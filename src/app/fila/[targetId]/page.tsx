@@ -108,7 +108,19 @@ export default async function TaskPage({
       {/* cabeçalho de discagem */}
       <Card>
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-xl font-semibold">{co.nomeFantasia || co.razaoSocial}</h1>
+          <h1 className="text-xl font-semibold">
+            <a
+              href={`https://www.google.com/search?q=${encodeURIComponent(
+                [co.nomeFantasia || co.razaoSocial, co.municipio, co.uf].filter(Boolean).join(" "),
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="pesquisar no Google"
+              className="hover:underline"
+            >
+              {co.nomeFantasia || co.razaoSocial} <span className="align-middle text-sm text-zinc-400">↗</span>
+            </a>
+          </h1>
           <StageBadge stage={t.stage} />
           <span className={`text-xs ${DEATH_CLASSES[death.state].text}`}>
             tentativa nº {t.attempts + 1} · {deathLabel(death)}
