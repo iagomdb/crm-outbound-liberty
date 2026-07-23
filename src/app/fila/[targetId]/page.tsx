@@ -9,9 +9,12 @@ import { PitchPanel } from "@/components/PitchPanel";
 import { Markdown } from "@/components/Markdown";
 import { ContactsSection } from "../../targets/[id]/_sections/ContactsSection";
 import { CompanySection } from "../../targets/[id]/_sections/CompanySection";
+import { TargetSection } from "../../targets/[id]/_sections/TargetSection";
+import { ScheduleReturnSection } from "../../targets/[id]/_sections/ScheduleReturnSection";
+import { unarchiveTarget } from "../../targets/[id]/crud-actions";
 import { logCallAndNext } from "./actions";
 import { sortearProxima } from "../../roleta/actions";
-import { fmtDateTime, fmtPhone } from "@/lib/format";
+import { fmtDate, fmtDateTime, fmtPhone } from "@/lib/format";
 import {
   MENTAL_LABELS,
   OBJECTION_LABELS,
@@ -24,7 +27,7 @@ import { deathFor, deathLabel, DEATH_CLASSES } from "@/core/death";
 import { goldenHourLabel } from "@/core/golden-hours";
 import { addBusinessDays, DEFAULT_FOLLOWUP_BUSINESS_DAYS, toDatetimeLocal } from "@/core/tasks";
 import { activityType, mentalState, objectionType, objectiveHit } from "@/db/schema";
-import { Card, Badge, ButtonLink, type BadgeTone } from "@/components/ui";
+import { Button, Card, Badge, ButtonLink, type BadgeTone } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -178,6 +181,20 @@ export default async function TaskPage({
         </dl>
       </Card>
 
+      {t.archivedAt && (
+        <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+          <span>
+            Arquivado em {fmtDate(t.archivedAt)}
+            {t.archiveReason ? ` — ${t.archiveReason}` : ""}
+          </span>
+          <form action={unarchiveTarget.bind(null, t.id)}>
+            <Button type="submit" variant="secondary" size="sm" className="border-red-200 bg-white text-red-700 hover:bg-red-100 dark:border-red-900 dark:bg-red-900 dark:text-red-200 dark:hover:bg-red-800">
+              desarquivar
+            </Button>
+          </form>
+        </div>
+      )}
+
       {/* o pretexto DESTA ligação */}
       <section className="rounded-xl border-2 border-sky-300 bg-sky-50 p-5 dark:border-sky-800 dark:bg-sky-950">
         <div className="text-xs font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">
@@ -260,6 +277,25 @@ export default async function TaskPage({
           <ContactsSection companyId={co.id} contacts={co.contacts} />
 
           <CompanySection co={co} />
+
+          <ScheduleReturnSection
+            targetId={t.id}
+            nextActionAt={t.nextActionAt}
+            nextActionPretext={t.nextActionPretext}
+          />
+
+          {/* gestão do alvo: estágio/valor/notas, arquivar, apagar da carteira */}
+          <TargetSection
+            targetId={t.id}
+            stage={t.stage}
+            mentalState={t.mentalState}
+            valorEstimado={t.valorEstimado}
+            nextActionPretext={t.nextActionPretext}
+            notes={t.notes}
+            archived={Boolean(t.archivedAt)}
+            stageOptions={stageOptions}
+            mentalOptions={mentalOptions}
+          />
 
           {/* histórico: uma linha por ligação, clique expande o registro completo */}
           <Card title={`Histórico (${t.activities.length})`}>
