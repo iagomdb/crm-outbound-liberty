@@ -1,7 +1,7 @@
 "use server";
 
 import { randomBytes } from "node:crypto";
-import { mkdir, unlink, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { eq, like } from "drizzle-orm";
@@ -12,30 +12,38 @@ import { slugify } from "@/lib/slugify";
 import {
   IMPORT_FIELDS,
   analyzeSheet,
+  applyHeaderMapping,
   executeImport,
   loadWorkbook,
+  mappingByHeader,
   previewImport,
   validateMapping,
   type ColumnMapping,
   type ImportField,
+  type ImportPreview,
+  type ImportResult,
 } from "@/core/import";
-import { UPLOAD_DIR, cleanupOldUploads, isValidToken, metaPath, readSheet, sheetPath } from "./storage";
+import { UPLOAD_DIR, cleanupOldUploads, deleteUpload, isValidToken, metaPath, readSheets, sheetPath } from "./storage";
 
 const s = (v: FormDataEntryValue | null) => (typeof v === "string" ? v.trim() : "");
 
-/** Passo 1: recebe o .xlsx, guarda no tmp e vai pra tela de mapeamento. */
+/** Passo 1: recebe um ou mais .xlsx (mesma estrutura), guarda no tmp e vai pra tela de mapeamento. */
 export async function uploadSheet(fd: FormData) {
   await requireUser();
 
-  const file = fd.get("file");
-  if (!(file instanceof File) || !file.size) redirect(`/importar?err=${encodeURIComponent("escolha um arquivo")}`);
-  if (!/\.xlsx$/i.test(file.name)) redirect(`/importar?err=${encodeURIComponent("envie um arquivo .xlsx")}`);
+  const files = fd.getAll("file").filter((f): f is File => f instanceof File && f.size > 0);
+  if (!files.length) redirect(`/importar?err=${encodeURIComponent("escolha pelo menos um arquivo")}`);
+  for (const f of files) {
+    if (!/\.xlsx$/i.test(f.name)) redirect(`/importar?err=${encodeURIComponent(`"${f.name}" não é .xlsx`)}`);
+  }
 
   await cleanupOldUploads();
   const token = randomBytes(16).toString("hex");
   await mkdir(UPLOAD_DIR, { recursive: true });
-  await writeFile(sheetPath(token), Buffer.from(await file.arrayBuffer()));
-  await writeFile(metaPath(token), JSON.stringify({ name: file.name, size: file.size }));
+  for (const [i, f] of files.entries()) {
+    await writeFile(sheetPath(token, i), Buffer.from(await f.arrayBuffer()));
+  }
+  await writeFile(metaPath(token), JSON.stringify({ files: files.map((f) => ({ name: f.name, size: f.size })) }));
 
   redirect(`/importar/${token}`);
 }
@@ -54,7 +62,7 @@ function back(token: string, params: Record<string, string>): never {
   redirect(`/importar/${token}?${q}`);
 }
 
-/** Passo 2: simula (dryRun) ou executa o import com o mapeamento escolhido. */
+/** Passo 2: simula (dryRun) ou executa o import — todos os arquivos do upload, mapeados pelo 1º. */
 export async function runImport(token: string, dryRun: boolean, fd: FormData) {
   await requireUser();
   if (!isValidToken(token)) redirect("/importar");
@@ -75,14 +83,40 @@ export async function runImport(token: string, dryRun: boolean, fd: FormData) {
   if (!dryRun && !state.campaignSlug && !state.newCampaignName) errors.push("escolha a carteira de destino (existente ou nova)");
   if (errors.length) back(token, { err: errors.join("; "), m: stateParam });
 
-  const buffer = await readSheet(token);
-  if (!buffer) back(token, { err: "upload expirou — envie a planilha de novo" });
-  const ws = await loadWorkbook(buffer!);
-  const { headerRowIdx } = analyzeSheet(ws);
+  const sheets = await readSheets(token);
+  if (!sheets.length) back(token, { err: "upload expirou — envie a planilha de novo" });
+
+  // o mapeamento foi feito sobre o 1º arquivo; nos demais reaplica pelo cabeçalho
+  const parsed: { ws: Awaited<ReturnType<typeof loadWorkbook>>; headerRowIdx: number; mapping: ColumnMapping }[] = [];
+  let byHeader: Map<string, ImportField> | null = null;
+  for (const [i, sheet] of sheets.entries()) {
+    let ws;
+    let analysis;
+    try {
+      ws = await loadWorkbook(sheet.buffer);
+      analysis = analyzeSheet(ws);
+    } catch (e) {
+      back(token, { err: `arquivo ${i + 1} ilegível: ${e instanceof Error ? e.message : "erro"}`, m: stateParam });
+    }
+    if (i === 0) {
+      byHeader = mappingByHeader(analysis!, mapping);
+      parsed.push({ ws: ws!, headerRowIdx: analysis!.headerRowIdx, mapping });
+    } else {
+      parsed.push({ ws: ws!, headerRowIdx: analysis!.headerRowIdx, mapping: applyHeaderMapping(analysis!, byHeader!) });
+    }
+  }
 
   if (dryRun) {
-    const preview = await previewImport(ws, headerRowIdx, mapping);
-    back(token, { p: JSON.stringify(preview), m: stateParam });
+    const total: ImportPreview = { read: 0, valid: 0, invalid: 0, existing: 0, skips: [] };
+    for (const p of parsed) {
+      const r = await previewImport(p.ws, p.headerRowIdx, p.mapping);
+      total.read += r.read;
+      total.valid += r.valid;
+      total.invalid += r.invalid;
+      total.existing += r.existing;
+      total.skips = [...total.skips, ...r.skips].slice(0, 10);
+    }
+    back(token, { p: JSON.stringify(total), m: stateParam });
   }
 
   // resolve a carteira: existente por slug, ou cria uma nova
@@ -107,18 +141,26 @@ export async function runImport(token: string, dryRun: boolean, fd: FormData) {
     campaign = found!;
   }
 
-  const result = await executeImport(ws, headerRowIdx, mapping, campaign.id);
+  const total: ImportResult = { read: 0, inserted: 0, updated: 0, skipped: 0, targetsCreated: 0, skips: [] };
+  for (const p of parsed) {
+    const r = await executeImport(p.ws, p.headerRowIdx, p.mapping, campaign.id);
+    total.read += r.read;
+    total.inserted += r.inserted;
+    total.updated += r.updated;
+    total.skipped += r.skipped;
+    total.targetsCreated += r.targetsCreated;
+    total.skips = [...total.skips, ...r.skips].slice(0, 10);
+  }
 
-  await unlink(sheetPath(token)).catch(() => {});
-  await unlink(metaPath(token)).catch(() => {});
+  await deleteUpload(token);
   revalidatePath("/", "layout");
 
   back(token, {
     done: JSON.stringify({
-      ...result,
-      skips: result.skips.slice(0, 10),
+      ...total,
       campaignName: campaign.name,
       campaignSlug: campaign.slug ?? "",
+      arquivos: sheets.length,
     }),
   });
 }

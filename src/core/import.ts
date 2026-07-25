@@ -263,6 +263,37 @@ export function analyzeSheet(ws: ExcelJS.Worksheet): SheetAnalysis {
   return { sheetName: ws.name, headerRowIdx, dataRowCount, columns };
 }
 
+// -------------------------------------------------------------- mapeamento entre arquivos
+
+/**
+ * Upload com vários arquivos: o usuário mapeia o PRIMEIRO; nos demais o
+ * mapeamento é reaplicado pelo NOME do cabeçalho (tolera coluna em posição
+ * diferente). Cabeçalho ausente no arquivo N é simplesmente ignorado.
+ */
+export function mappingByHeader(analysis: SheetAnalysis, mapping: ColumnMapping): Map<string, ImportField> {
+  const byHeader = new Map<string, ImportField>();
+  for (const col of analysis.columns) {
+    const field = mapping[col.col];
+    if (field) byHeader.set(normalizeHeader(col.header), field);
+  }
+  return byHeader;
+}
+
+export function applyHeaderMapping(analysis: SheetAnalysis, byHeader: Map<string, ImportField>): ColumnMapping {
+  const mapping: ColumnMapping = {};
+  const taken = new Set<ImportField>();
+  for (const col of analysis.columns) {
+    const field = byHeader.get(normalizeHeader(col.header));
+    if (!field) continue;
+    if (!MULTI_IMPORT_FIELDS.has(field)) {
+      if (taken.has(field)) continue;
+      taken.add(field);
+    }
+    mapping[col.col] = field;
+  }
+  return mapping;
+}
+
 // -------------------------------------------------------------- validação do mapeamento
 
 /** Retorna mensagens de erro; vazio = mapeamento válido. */

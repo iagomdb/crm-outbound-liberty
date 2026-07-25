@@ -6,7 +6,7 @@ import { ButtonLink, Field, Input, Select } from "@/components/ui";
 import { PendingButton, PendingNote } from "@/components/PendingButton";
 import { IMPORT_FIELDS, analyzeSheet, loadWorkbook, type ImportPreview, type SheetAnalysis } from "@/core/import";
 import { runImport, type MappingState } from "../actions";
-import { readMeta, readSheet, isValidToken } from "../storage";
+import { readMeta, readSheets, isValidToken } from "../storage";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +22,7 @@ type DoneResult = {
   skips: { rowIdx: number; rawCnpj: string; razaoSocial: string }[];
   campaignName: string;
   campaignSlug: string;
+  arquivos: number;
 };
 
 const parseJson = <T,>(raw?: string): T | null => {
@@ -48,8 +49,8 @@ export default async function MapeamentoPage({
   const doneResult = parseJson<DoneResult>(done);
   if (doneResult) return <ResultView r={doneResult} />;
 
-  const buffer = await readSheet(token);
-  if (!buffer) {
+  const sheets = await readSheets(token);
+  if (!sheets.length) {
     return (
       <div className="mx-auto flex max-w-xl flex-col gap-4">
         <h1 className="text-xl font-semibold">Importar leads</h1>
@@ -63,9 +64,15 @@ export default async function MapeamentoPage({
     );
   }
 
+  // o mapeamento é feito sobre o PRIMEIRO arquivo; os demais só são contados aqui
   let analysis: SheetAnalysis;
+  let totalRows = 0;
   try {
-    analysis = analyzeSheet(await loadWorkbook(buffer));
+    analysis = analyzeSheet(await loadWorkbook(sheets[0].buffer));
+    totalRows = analysis.dataRowCount;
+    for (const s of sheets.slice(1)) {
+      totalRows += analyzeSheet(await loadWorkbook(s.buffer)).dataRowCount;
+    }
   } catch (e) {
     return (
       <div className="mx-auto flex max-w-xl flex-col gap-4">
@@ -96,9 +103,11 @@ export default async function MapeamentoPage({
         </Link>
         <h1 className="text-xl font-semibold">Mapear colunas</h1>
         <p className="text-sm text-zinc-500">
-          {meta?.name ?? "planilha"} · aba “{analysis.sheetName}” · {analysis.dataRowCount} linhas de dados ·
-          cabeçalho na linha {analysis.headerRowIdx}. Confira o destino de cada coluna — só a Razão social/Nome é
-          obrigatória. CNPJ é recomendado quando existir: com ele a deduplicação é exata; sem ele, é pelo nome.
+          {sheets.length > 1
+            ? `${sheets.length} arquivos (${meta?.files.map((f) => f.name).join(", ") ?? ""}) · ${totalRows} linhas no total — o mapeamento abaixo é do primeiro arquivo e será aplicado aos demais pelo nome do cabeçalho.`
+            : `${meta?.files[0]?.name ?? "planilha"} · aba “${analysis.sheetName}” · ${analysis.dataRowCount} linhas de dados · cabeçalho na linha ${analysis.headerRowIdx}.`}{" "}
+          Confira o destino de cada coluna — só a Razão social/Nome é obrigatória. CNPJ é recomendado quando existir:
+          com ele a deduplicação é exata; sem ele, é pelo nome.
         </p>
       </div>
 
@@ -197,6 +206,7 @@ function ResultView({ r }: { r: DoneResult }) {
       </div>
 
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
+        {r.arquivos > 1 ? `${r.arquivos} arquivos · ` : ""}
         {r.read} linhas lidas · <strong>{r.inserted} empresas novas</strong> · {r.updated} atualizadas/mescladas ·{" "}
         {r.skipped} puladas · <strong>{r.targetsCreated} alvos criados</strong> na carteira.
       </div>
