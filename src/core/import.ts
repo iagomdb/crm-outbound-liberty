@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
-import { inArray, sql } from "drizzle-orm";
+import JSZip from "jszip";
+import { eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "../db";
 import { companies, targets } from "../db/schema";
 
@@ -34,12 +35,16 @@ export const IMPORT_FIELDS = [
   { key: "numero", label: "Número" },
   { key: "complemento", label: "Complemento" },
   { key: "socios", label: "Quadro de sócios" },
+  { key: "mapsUrl", label: "Link do Google Maps" },
+  { key: "horarioFuncionamento", label: "Horário de funcionamento" },
+  // colunas de scrape sem posição fixa (W4Efsd N): endereço e horário são detectados pelo conteúdo
+  { key: "mapsExtras", label: "Endereço/Horário do Maps (detecção autom.)" },
 ] as const;
 
 export type ImportField = (typeof IMPORT_FIELDS)[number]["key"];
 
 /** Campos que aceitam mais de uma coluna mapeada (os valores se acumulam). */
-export const MULTI_IMPORT_FIELDS = new Set<ImportField>(["cnaeSecundarios", "emails", "telefones"]);
+export const MULTI_IMPORT_FIELDS = new Set<ImportField>(["cnaeSecundarios", "emails", "telefones", "mapsExtras"]);
 
 /** coluna da planilha (1-based) → campo do sistema */
 export type ColumnMapping = Record<number, ImportField>;
@@ -121,12 +126,15 @@ const normalizeHeader = (h: string) =>
 /** Ordem importa: os padrões mais específicos vêm primeiro ("cnae sec" antes de "cnae"). */
 const SUGGESTIONS: [RegExp, ImportField][] = [
   [/^cnpj/, "cnpj"],
-  [/razao social|^razao$|^nome$/, "razaoSocial"],
+  [/hfpxzc|maps/, "mapsUrl"],
+  [/razao social|^razao$|^nome$|xxvwce/, "razaoSocial"],
   [/fantasia/, "nomeFantasia"],
   [/abertura/, "dataAbertura"],
   [/^porte/, "porte"],
   [/cnae sec/, "cnaeSecundarios"],
-  [/cnae|^tipo$|categoria/, "cnaePrincipal"],
+  [/^w4efsd\s+\d/, "mapsExtras"],
+  [/horario|funcionamento/, "horarioFuncionamento"],
+  [/cnae|^tipo$|categoria|^w4efsd$/, "cnaePrincipal"],
   [/natureza/, "naturezaJuridica"],
   [/capital/, "capitalSocial"],
   [/tipo\s*e-?mail/, "tipoEmail"],
@@ -140,6 +148,7 @@ const SUGGESTIONS: [RegExp, ImportField][] = [
   [/^numero$|^num\b|^nr?\b/, "numero"],
   [/complemento/, "complemento"],
   [/socio/, "socios"],
+  [/usdlk/, "telefones"],
 ];
 
 export function suggestField(header: string): ImportField | null {
@@ -167,11 +176,46 @@ export type SheetAnalysis = {
 
 export async function loadWorkbook(buffer: Buffer): Promise<ExcelJS.Worksheet> {
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(buffer as unknown as ArrayBuffer);
-  const ws = wb.worksheets[0];
+  let ws: ExcelJS.Worksheet | undefined;
+  try {
+    await wb.xlsx.load(buffer as unknown as ArrayBuffer);
+    ws = wb.worksheets[0];
+  } catch {
+    // xlsx de scraper (SheetJS): repacota e tenta de novo
+    const wb2 = new ExcelJS.Workbook();
+    await wb2.xlsx.load((await sanitizeXlsx(buffer)) as unknown as ArrayBuffer);
+    ws = wb2.worksheets[0];
+  }
   if (!ws) throw new Error("planilha vazia");
   return ws;
 }
+
+/**
+ * Scrapers (ex.: SheetJS dos scraps do Google Maps) geram xlsx que o exceljs
+ * não lê: docProps/app.xml que quebra o parser e nome de aba com caracteres
+ * proibidos (a URL da busca). Repacota o zip sem o app.xml e renomeia as abas.
+ */
+async function sanitizeXlsx(buffer: Buffer): Promise<Buffer> {
+  const zip = await JSZip.loadAsync(buffer);
+  const out = new JSZip();
+  let idx = 0;
+  for (const [name, entry] of Object.entries(zip.files)) {
+    if (entry.dir || name === "docProps/app.xml") continue;
+    if (name === "xl/workbook.xml") {
+      let xml = await entry.async("string");
+      xml = xml.replace(/(<sheet\b[^>]*?name=")([^"]*)(")/g, (_m, a, _n, c) => `${a}Planilha${++idx}${c}`);
+      out.file(name, xml);
+    } else {
+      out.file(name, await entry.async("nodebuffer"));
+    }
+  }
+  return out.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+}
+
+// detecção de conteúdo pras colunas flutuantes do scrape do Maps (W4Efsd N)
+const cleanDot = (s: string) => s.replace(/^[·\s]+|[·\s]+$/g, "").trim();
+const isHours = (s: string) => /fecha|reabre|abre [aà]s|abre \w{3}\.|aberto|fechado|24 horas/i.test(s);
+const looksLikeAddress = (s: string) => s.length > 3 && /[a-zà-ú]/i.test(s) && !isHours(s);
 
 /**
  * Detecta a linha de cabeçalho (primeira, entre as 20 iniciais, cujas células
@@ -284,6 +328,15 @@ function* extractRows(ws: ExcelJS.Worksheet, headerRowIdx: number, mapping: Colu
       continue;
     }
 
+    // colunas flutuantes do Maps: endereço e horário detectados pelo conteúdo
+    // (sem split por vírgula — endereço tem vírgula)
+    const extras = fieldCols
+      .get("mapsExtras")!
+      .map((c) => cleanDot(cellStr(row.getCell(c).value)))
+      .filter(Boolean);
+    const enderecoMaps = extras.find(looksLikeAddress) ?? null;
+    const horarioMaps = extras.filter(isHours).map(cleanDot).join(" · ") || null;
+
     yield {
       rowIdx: i,
       ok: true,
@@ -304,10 +357,12 @@ function* extractRows(ws: ExcelJS.Worksheet, headerRowIdx: number, mapping: Colu
         uf: val("uf").slice(0, 2).toUpperCase() || null,
         municipio: val("municipio") || null,
         bairro: val("bairro") || null,
-        logradouro: val("logradouro") || null,
+        logradouro: val("logradouro") || enderecoMaps,
         numero: val("numero") || null,
         complemento: val("complemento") || null,
         socios: parseSocios(val("socios")),
+        mapsUrl: val("mapsUrl") || null,
+        horarioFuncionamento: val("horarioFuncionamento") || horarioMaps,
       },
     };
   }
@@ -416,6 +471,18 @@ export async function executeImport(
       if (existing) {
         company = existing;
         result.updated++;
+        // enriquece só o que estava vazio — nunca sobrescreve dado existente
+        await db
+          .update(companies)
+          .set({
+            mapsUrl: sql`coalesce(${companies.mapsUrl}, ${r.values.mapsUrl ?? null})`,
+            horarioFuncionamento: sql`coalesce(${companies.horarioFuncionamento}, ${r.values.horarioFuncionamento ?? null})`,
+            logradouro: sql`coalesce(${companies.logradouro}, ${r.values.logradouro ?? null})`,
+            cnaePrincipal: sql`coalesce(${companies.cnaePrincipal}, ${r.values.cnaePrincipal ?? null})`,
+            telefones: sql`case when jsonb_array_length(${companies.telefones}) = 0 then ${JSON.stringify(r.values.telefones ?? [])}::jsonb else ${companies.telefones} end`,
+            updatedAt: new Date(),
+          })
+          .where(eq(companies.id, existing.id));
       } else {
         const [c] = await db.insert(companies).values(r.values).returning({ id: companies.id, icpFit: companies.icpFit });
         company = c;
@@ -448,6 +515,8 @@ export async function executeImport(
             numero: keepText("numero"),
             complemento: keepText("complemento"),
             socios: keepArray("socios"),
+            mapsUrl: keepText("maps_url"),
+            horarioFuncionamento: keepText("horario_funcionamento"),
             updatedAt: new Date(),
           },
         })

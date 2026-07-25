@@ -122,16 +122,21 @@ export default async function TaskPage({
       <Card>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-xl font-semibold">
+            {/* nomes genéricos ("Advocacia Silva") existem aos montes — com link do Maps, abre O lugar certo */}
             <a
-              href={`https://www.google.com/search?q=${encodeURIComponent(
-                [co.nomeFantasia || co.razaoSocial, co.municipio, co.uf].filter(Boolean).join(" "),
-              )}`}
+              href={
+                co.mapsUrl ||
+                `https://www.google.com/search?q=${encodeURIComponent(
+                  [co.nomeFantasia || co.razaoSocial, co.municipio, co.uf].filter(Boolean).join(" "),
+                )}`
+              }
               target="_blank"
               rel="noopener noreferrer"
-              title="pesquisar no Google"
+              title={co.mapsUrl ? "abrir no Google Maps" : "pesquisar no Google"}
               className="hover:underline"
             >
-              {co.nomeFantasia || co.razaoSocial} <span className="align-middle text-sm text-zinc-400">↗</span>
+              {co.nomeFantasia || co.razaoSocial}{" "}
+              <span className="align-middle text-sm text-zinc-400">{co.mapsUrl ? "📍" : "↗"}</span>
             </a>
           </h1>
           <StageBadge stage={t.stage} />
@@ -183,6 +188,10 @@ export default async function TaskPage({
           <div>
             <dt className={lbl}>Melhor horário</dt>
             <dd>{decisor?.melhorHorario || "—"}</dd>
+          </div>
+          <div>
+            <dt className={lbl}>Funcionamento (Maps)</dt>
+            <dd>{co.horarioFuncionamento || "—"}</dd>
           </div>
           <div>
             <dt className={lbl}>Estado mental</dt>

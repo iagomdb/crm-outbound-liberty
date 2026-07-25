@@ -71,6 +71,13 @@
       "when": 1784751641696,
       "tag": "0009_broken_nehzno",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785010269638,
+      "tag": "0010_careless_rawhide_kid",
+      "breakpoints": true
     }
   ]
 }

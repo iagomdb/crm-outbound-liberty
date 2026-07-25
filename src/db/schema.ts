@@ -179,6 +179,8 @@ export const companies = pgTable("companies", {
   socios: jsonb().$type<{ nome: string; qualificacao?: string }[]>().notNull().default(emptyJsonArray),
   source: text().default("consultas.plus"),
   icpFit: boolean(), // null = não triado; true/false = decisão de triagem de ICP
+  mapsUrl: text(), // link do lugar no Google Maps (scrap) — o clique no nome usa ele quando existe
+  horarioFuncionamento: text(), // horário de funcionamento (scrap do Maps)
   // descobertos na conversa (estatística de ICP) — null = não descoberto ainda
   tipoCobranca: cobrancaType(), // como resolve inadimplência hoje
   faixaClientes: faixaClientes(), // base de clientes estimada

@@ -291,7 +291,7 @@ export function computeAbStats(calls: IcpRawCall[]): AbStat[] {
   const map = new Map<string, AbStat>();
   for (const c of calls) {
     for (const a of c.abordagens ?? []) {
-      const key = `${a.categoria} ${a.opcao}`;
+      const key = `${a.categoria}||${a.opcao}`;
       const s = map.get(key) ?? {
         categoria: a.categoria,
         opcao: a.opcao,
