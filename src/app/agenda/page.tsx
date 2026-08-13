@@ -44,7 +44,7 @@ export default async function AgendaPage() {
           </h2>
           <ul className="flex flex-col divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-white dark:divide-zinc-900 dark:border-zinc-800 dark:bg-zinc-950">
             {groups[b].map((t) => {
-              const d = deathFor({ attempts: t.attempts, stageChangedAt: t.stageChangedAt });
+              const d = deathFor({ attempts: t.attempts, stageChangedAt: t.stageChangedAt, stage: t.stage });
               return (
                 <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm">
                   <div className="min-w-0">

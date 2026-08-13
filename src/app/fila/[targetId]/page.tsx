@@ -59,7 +59,7 @@ export default async function TaskPage({
   if (!t) notFound();
 
   const co = t.company;
-  const death = deathFor({ attempts: t.attempts, stageChangedAt: t.stageChangedAt });
+  const death = deathFor({ attempts: t.attempts, stageChangedAt: t.stageChangedAt, stage: t.stage });
   const gh = GH_UI[goldenHourLabel()];
   const decisor = t.primaryContact ?? co.contacts.find((c) => c.papel === "decisor") ?? null;
   const lastCall = t.activities[0] ?? null;

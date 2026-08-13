@@ -154,7 +154,7 @@ function Card({
   archiveAction: (id: string, reason: string) => Promise<void>;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: item.id });
-  const d = deathFor({ attempts: item.attempts, stageChangedAt: item.stageChangedAt });
+  const d = deathFor({ attempts: item.attempts, stageChangedAt: item.stageChangedAt, stage });
   const style = transform ? { transform: `translate(${transform.x}px, ${transform.y}px)`, zIndex: 50 } : undefined;
 
   return (
@@ -198,7 +198,7 @@ function Card({
             {item.attempts} tent · {d.daysStalled}d · {deathLabel(d)}
           </span>
           <div className="flex shrink-0 items-center gap-1">
-            {d.state !== "ok" && (
+            {d.state !== "ok" && d.state !== "pre-ciclo" && (
               <button
                 onClick={() => {
                   if (confirm(`Arquivar "${item.company}"?`)) {

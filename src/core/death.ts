@@ -6,7 +6,7 @@
 export const DEATH_ATTEMPT_LIMIT = 8; // playbook: maioria dos sins entre 5º-8º contato
 export const DEATH_STALL_DAYS = 21; // ~3 semanas parado no mesmo estágio = morto
 
-export type DeathState = "ok" | "morrendo" | "morto";
+export type DeathState = "pre-ciclo" | "ok" | "morrendo" | "morto";
 
 export type Death = {
   score: number; // 0..1
@@ -18,9 +18,20 @@ export type Death = {
   nearest: "tentativas" | "tempo";
 };
 
+/**
+ * Pré-ciclo: alvo que ainda NÃO entrou na cadência (nenhuma tentativa e ainda
+ * em novo/fit). Não pode morrer por tempo — `stageChangedAt` aqui é a data do
+ * import, não "parado no estágio". A espera é do operador, não do lead. Mesma
+ * regra que a varredura de órfãos já usa em getOrphans().
+ */
+export function isPreCycle(input: { attempts: number; stage?: string | null }): boolean {
+  return input.attempts === 0 && (input.stage == null || input.stage === "novo" || input.stage === "fit");
+}
+
 export function deathFor(input: {
   attempts: number;
   stageChangedAt: Date | string;
+  stage?: string | null;
   now?: Date;
 }): Death {
   const now = input.now ?? new Date();
@@ -28,6 +39,19 @@ export function deathFor(input: {
     typeof input.stageChangedAt === "string" ? new Date(input.stageChangedAt) : input.stageChangedAt;
   const daysStalled = Math.max(0, Math.floor((now.getTime() - changed.getTime()) / 86_400_000));
   const attempts = input.attempts;
+
+  // Relógio de morte só começa a correr depois da 1ª tentativa.
+  if (isPreCycle({ attempts, stage: input.stage })) {
+    return {
+      score: 0,
+      state: "pre-ciclo",
+      attempts,
+      attemptsLeft: DEATH_ATTEMPT_LIMIT,
+      daysStalled,
+      daysLeft: DEATH_STALL_DAYS,
+      nearest: "tentativas",
+    };
+  }
 
   const fromAttempts = attempts / DEATH_ATTEMPT_LIMIT;
   const fromTime = daysStalled / DEATH_STALL_DAYS;
@@ -46,11 +70,13 @@ export function deathFor(input: {
 
 /** Rótulo curto de estimativa pro card. */
 export function deathLabel(d: Death): string {
+  if (d.state === "pre-ciclo") return "não ligado";
   if (d.state === "morto") return "morto — arquive";
   return d.nearest === "tentativas" ? `≈${d.attemptsLeft} tent.` : `≈${d.daysLeft}d`;
 }
 
 export const DEATH_CLASSES: Record<DeathState, { bar: string; text: string }> = {
+  "pre-ciclo": { bar: "bg-zinc-300 dark:bg-zinc-700", text: "text-zinc-500 dark:text-zinc-400" },
   ok: { bar: "bg-emerald-500", text: "text-emerald-600 dark:text-emerald-400" },
   morrendo: { bar: "bg-amber-500", text: "text-amber-600 dark:text-amber-400" },
   morto: { bar: "bg-red-500", text: "text-red-600 dark:text-red-400" },

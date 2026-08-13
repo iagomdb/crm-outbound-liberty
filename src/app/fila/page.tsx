@@ -31,7 +31,7 @@ function Stat({ label, value, meta }: { label: string; value: number; meta?: num
 }
 
 function FilaRow({ t, hint }: { t: FilaItem; hint: string }) {
-  const d = deathFor({ attempts: t.attempts, stageChangedAt: t.stageChangedAt });
+  const d = deathFor({ attempts: t.attempts, stageChangedAt: t.stageChangedAt, stage: t.stage });
   return (
     <li>
       <Link

@@ -36,7 +36,7 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
   if (!t) notFound();
 
   const co = t.company;
-  const death = deathFor({ attempts: t.attempts, stageChangedAt: t.stageChangedAt });
+  const death = deathFor({ attempts: t.attempts, stageChangedAt: t.stageChangedAt, stage: t.stage });
   const stageOptions = STAGE_ORDER.map((v) => ({ value: v, label: STAGE_LABELS[v] }));
   const objectionOptions = objectionType.enumValues.map((v) => ({ value: v, label: OBJECTION_LABELS[v] ?? v }));
   const objectiveOptions = objectiveHit.enumValues.map((v) => ({ value: v, label: OBJECTIVE_LABELS[v] }));
