@@ -6,7 +6,7 @@ import { KanbanBoard, type BoardColumn, type BoardItem } from "@/components/Kanb
 import { Card, Badge, ButtonLink, type BadgeTone } from "@/components/ui";
 import { moveTarget, archiveTarget } from "./actions";
 import { goldenHourLabel } from "@/core/golden-hours";
-import { diagnose, funnelRates, pct } from "@/core/funnel";
+import { funnelRates, pct } from "@/core/funnel";
 import { ACTIVE_STAGES, STAGE_LABELS } from "@/core/pipeline";
 import { fmtCnpj, fmtPhone } from "@/lib/format";
 
@@ -48,7 +48,6 @@ export default async function CampaignBoard({ params }: { params: Promise<{ slug
     getTriagemCount(campaign.id),
   ]);
   const r = funnelRates(metrics);
-  const diags = diagnose(metrics);
   const gh = GH_UI[goldenHourLabel()];
 
   const byStage: Record<string, BoardItem[]> = {};
@@ -137,13 +136,6 @@ export default async function CampaignBoard({ params }: { params: Promise<{ slug
           <Arrow rate={pct(r.reuniao)} />
           <Tile label="Reuniões" value={metrics.reunioes} />
         </div>
-        <ul className="mt-3 flex flex-col gap-1 text-xs">
-          {diags.map((d, i) => (
-            <li key={i} className={d.tone === "warn" ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}>
-              {d.text}
-            </li>
-          ))}
-        </ul>
       </Card>
 
       {/* kanban */}
