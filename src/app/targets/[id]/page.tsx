@@ -24,7 +24,7 @@ import {
   STAGE_ORDER,
 } from "@/core/pipeline";
 import { deathFor, deathLabel, DEATH_CLASSES } from "@/core/death";
-import { addBusinessDays, DEFAULT_FOLLOWUP_BUSINESS_DAYS, toDatetimeLocal } from "@/core/tasks";
+import { addDays, noAnswerDelayDays, toDatetimeLocal } from "@/core/tasks";
 import { activityType, mentalState, objectionType, objectiveHit } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -146,7 +146,7 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
               mentalOptions={mentalOptions}
               typeOptions={typeOptions}
               roleLabels={ROLE_LABELS}
-              defaultNextActionAt={toDatetimeLocal(addBusinessDays(new Date(), DEFAULT_FOLLOWUP_BUSINESS_DAYS))}
+              defaultNextActionAt={toDatetimeLocal(addDays(new Date(), noAnswerDelayDays(t.noAnswerStreak + 1) ?? 28))}
             />
           </Card>
         </div>

@@ -78,6 +78,13 @@
       "when": 1785010269638,
       "tag": "0010_careless_rawhide_kid",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786639988316,
+      "tag": "0011_conscious_swordsman",
+      "breakpoints": true
     }
   ]
 }

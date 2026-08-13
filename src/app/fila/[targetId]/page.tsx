@@ -25,7 +25,7 @@ import {
 } from "@/core/pipeline";
 import { deathFor, deathLabel, DEATH_CLASSES } from "@/core/death";
 import { goldenHourLabel } from "@/core/golden-hours";
-import { addBusinessDays, DEFAULT_FOLLOWUP_BUSINESS_DAYS, toDatetimeLocal } from "@/core/tasks";
+import { addDays, noAnswerDelayDays, NO_ANSWER_MAX_STREAK, toDatetimeLocal } from "@/core/tasks";
 import { activityType, mentalState, objectionType, objectiveHit } from "@/db/schema";
 import { Button, Card, Badge, ButtonLink, type BadgeTone } from "@/components/ui";
 
@@ -150,6 +150,20 @@ export default async function TaskPage({
         <p className="text-sm text-zinc-500">
           {co.razaoSocial} · {[co.municipio, co.uf].filter(Boolean).join(" - ") || "—"} · {t.campaign.name}
         </p>
+
+        {t.noAnswerStreak > 0 && (
+          <p
+            className={`mt-2 text-sm ${
+              t.noAnswerStreak >= NO_ANSWER_MAX_STREAK - 1
+                ? "font-medium text-red-600 dark:text-red-400"
+                : "text-amber-600 dark:text-amber-400"
+            }`}
+          >
+            {t.noAnswerStreak >= NO_ANSWER_MAX_STREAK - 1
+              ? `⚠️ última chance — ${t.noAnswerStreak} tentativas sem atender. Se não atender agora, o lead é dado como perdido.`
+              : `${t.noAnswerStreak}ª tentativa sem atender — se não atender, volta em ${noAnswerDelayDays(t.noAnswerStreak + 1)} dias.`}
+          </p>
+        )}
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {phones.length === 0 && <span className="text-sm text-red-500">sem telefone — caça o número primeiro</span>}
@@ -306,7 +320,7 @@ export default async function TaskPage({
               mentalOptions={mentalOptions}
               typeOptions={typeOptions}
               roleLabels={ROLE_LABELS}
-              defaultNextActionAt={toDatetimeLocal(addBusinessDays(new Date(), DEFAULT_FOLLOWUP_BUSINESS_DAYS))}
+              defaultNextActionAt={toDatetimeLocal(addDays(new Date(), noAnswerDelayDays(t.noAnswerStreak + 1) ?? 28))}
               submitLabel={roletaSlugs ? "Registrar → 🎲 sortear próxima" : "Registrar → próxima da fila"}
             />
           </Card>

@@ -3,7 +3,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "../db/schema";
 import { suggestStage, type ObjectiveHit, type Stage } from "./pipeline";
 import { isGoldenHour } from "./golden-hours";
-import { resolveTask } from "./tasks";
+import { NO_ANSWER_DEAD_REASON, resolveTask } from "./tasks";
 
 type DB = PostgresJsDatabase<typeof schema>;
 type ActivityType = (typeof schema.activityType.enumValues)[number];
@@ -52,24 +52,43 @@ export async function recordCall(db: DB, targetId: string, input: CallInput) {
   const now = input.now ?? new Date();
 
   const [cur] = await db
-    .select({ stage: schema.targets.stage, companyId: schema.targets.companyId })
+    .select({
+      stage: schema.targets.stage,
+      companyId: schema.targets.companyId,
+      noAnswerStreak: schema.targets.noAnswerStreak,
+    })
     .from(schema.targets)
     .where(eq(schema.targets.id, targetId));
 
-  const newStage: Stage =
+  let newStage: Stage =
     input.stageOverride ??
     suggestStage((cur?.stage ?? "novo") as Stage, {
       reachedHuman: input.reachedHuman,
       objectiveHit: input.objectiveHit,
       qualified: input.qualified,
     });
-  const stageChanged = newStage !== (cur?.stage ?? "novo");
 
-  const task = resolveTask(
+  // escada de "não atende": sobe a cada tentativa sem humano, zera ao falar
+  const noAnswerStreak = input.reachedHuman ? 0 : (cur?.noAnswerStreak ?? 0) + 1;
+
+  let task = resolveTask(
     newStage,
-    { nextActionAt: input.nextActionAt, nextActionPretext: input.nextActionPretext },
+    {
+      nextActionAt: input.nextActionAt,
+      nextActionPretext: input.nextActionPretext,
+      noAnswerStreak,
+    },
     now,
   );
+
+  // 3 tentativas seguidas sem ninguém atender e sem data à mão: linha morta
+  const killedByNoAnswer = task.noAnswerExhausted && !input.stageOverride;
+  if (killedByNoAnswer) {
+    newStage = "perdido";
+    task = { nextActionAt: null, nextActionPretext: null, noAnswerExhausted: true };
+  }
+
+  const stageChanged = newStage !== (cur?.stage ?? "novo");
 
   const [act] = await db
     .insert(schema.activities)
@@ -100,6 +119,7 @@ export async function recordCall(db: DB, targetId: string, input: CallInput) {
       stage: newStage,
       lastContactAt: now,
       attempts: sql`${schema.targets.attempts} + 1`,
+      noAnswerStreak,
       nextActionAt: task.nextActionAt,
       nextActionPretext: task.nextActionPretext,
       updatedAt: now,
@@ -109,7 +129,9 @@ export async function recordCall(db: DB, targetId: string, input: CallInput) {
       ...(input.contactId ? { primaryContactId: input.contactId } : {}),
       ...(input.mentalState ? { mentalState: input.mentalState } : {}),
       ...(input.icpGrade ? { icpGrade: input.icpGrade } : {}),
-      ...(newStage === "perdido" ? { lostReason: input.lostReason || "não informado" } : {}),
+      ...(newStage === "perdido"
+        ? { lostReason: killedByNoAnswer ? NO_ANSWER_DEAD_REASON : input.lostReason || "não informado" }
+        : {}),
     })
     .where(eq(schema.targets.id, targetId));
 
@@ -132,5 +154,5 @@ export async function recordCall(db: DB, targetId: string, input: CallInput) {
       .values({ targetId, scheduledAt: input.nextActionAt, status: "agendada", activityId: act.id });
   }
 
-  return { activityId: act.id, newStage, task };
+  return { activityId: act.id, newStage, task, noAnswerStreak, killedByNoAnswer };
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "targets" ADD COLUMN "no_answer_streak" integer DEFAULT 0 NOT NULL;

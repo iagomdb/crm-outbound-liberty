@@ -235,6 +235,7 @@ export const targets = pgTable(
     icpGrade: icpGrade(), // A-D: qualidade do ICP percebida (null = não avaliado)
     primaryContactId: uuid().references(() => contacts.id, { onDelete: "set null" }), // o decisor
     attempts: integer().notNull().default(0), // nº de contatos (cadência)
+    noAnswerStreak: integer().notNull().default(0), // tentativas SEGUIDAS sem atender (zera ao falar com humano)
     lastContactAt: timestamp({ withTimezone: true }),
     nextActionAt: timestamp({ withTimezone: true }),
     nextActionPretext: text(), // o PRETEXTO NOVO — cadência teimosa exige motivo novo
