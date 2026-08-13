@@ -3,7 +3,7 @@ import { MaskedInput } from "@/components/MaskedInput";
 import { ConfirmButton } from "@/components/ConfirmButton";
 import { deleteCompany, updateCompany } from "../crud-actions";
 import type { TargetDetail } from "@/db/queries";
-import { fmtCnpj, fmtDate, fmtMoney, fmtPhone } from "@/lib/format";
+import { fmtCnpj, fmtDate, fmtMoney, fmtPhone, waLink } from "@/lib/format";
 
 type Company = TargetDetail["company"];
 
@@ -29,7 +29,31 @@ export function CompanySection({ co }: { co: Company }) {
         <Def label="CNAE" span="col-span-2 sm:col-span-3">
           {co.cnaePrincipal || "—"}
         </Def>
-        <Def label="Telefones">{(co.telefones ?? []).map(fmtPhone).join(" · ") || "—"}</Def>
+        <Def label="Telefones">
+          {(co.telefones ?? []).length === 0
+            ? "—"
+            : (co.telefones ?? []).map((n, i) => {
+                const wa = waLink(n);
+                return (
+                  <span key={`${n}-${i}`}>
+                    {i > 0 && " · "}
+                    {fmtPhone(n)}
+                    {wa && (
+                      <a
+                        href={wa}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Abrir no WhatsApp"
+                        aria-label={`Abrir ${fmtPhone(n)} no WhatsApp`}
+                        className="ml-1 hover:opacity-70"
+                      >
+                        💬
+                      </a>
+                    )}
+                  </span>
+                );
+              })}
+        </Def>
         <Def label="E-mails" span="col-span-2">
           <span className="break-words">{(co.emails ?? []).join(" · ") || "—"}</span>
         </Def>

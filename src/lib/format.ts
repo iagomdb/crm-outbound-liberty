@@ -11,6 +11,21 @@ export function fmtPhone(d?: string | null): string {
   return d ?? "";
 }
 
+/**
+ * Celular BR = 11 dígitos (DDD + 9 + 8). Fixo tem 10 e praticamente não tem
+ * WhatsApp, então só o celular ganha o botão do zap.
+ */
+export function isMobile(d?: string | null): boolean {
+  return (d ?? "").replace(/\D/g, "").length === 11;
+}
+
+/** Link do WhatsApp (wa.me/55DDDNUMERO). Null se não for celular. */
+export function waLink(d?: string | null): string | null {
+  const s = (d ?? "").replace(/\D/g, "");
+  if (s.length !== 11) return null;
+  return `https://wa.me/55${s}`;
+}
+
 export function fmtDateTime(d?: Date | string | null): string {
   if (!d) return "—";
   const dt = typeof d === "string" ? new Date(d) : d;

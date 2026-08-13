@@ -14,7 +14,7 @@ import { ScheduleReturnSection } from "../../targets/[id]/_sections/ScheduleRetu
 import { unarchiveTarget } from "../../targets/[id]/crud-actions";
 import { logCallAndNext } from "./actions";
 import { sortearProxima } from "../../roleta/actions";
-import { fmtDate, fmtDateTime, fmtPhone } from "@/lib/format";
+import { fmtDate, fmtDateTime, fmtPhone, waLink } from "@/lib/format";
 import {
   MENTAL_LABELS,
   OBJECTION_LABELS,
@@ -153,16 +153,34 @@ export default async function TaskPage({
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {phones.length === 0 && <span className="text-sm text-red-500">sem telefone — caça o número primeiro</span>}
-          {phones.map((p) => (
-            <a
-              key={p.n}
-              href={`tel:${p.n.replace(/\D/g, "")}`}
-              className="rounded-lg bg-zinc-900 px-4 py-2 text-base font-semibold text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-            >
-              📞 {fmtPhone(p.n)}
-              {p.who && <span className="ml-1.5 text-xs font-normal opacity-70">({p.who})</span>}
-            </a>
-          ))}
+          {phones.map((p) => {
+            const wa = waLink(p.n);
+            return (
+              <span key={p.n} className="inline-flex items-stretch">
+                <a
+                  href={`tel:${p.n.replace(/\D/g, "")}`}
+                  className={`bg-zinc-900 px-4 py-2 text-base font-semibold text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 ${
+                    wa ? "rounded-l-lg" : "rounded-lg"
+                  }`}
+                >
+                  📞 {fmtPhone(p.n)}
+                  {p.who && <span className="ml-1.5 text-xs font-normal opacity-70">({p.who})</span>}
+                </a>
+                {wa && (
+                  <a
+                    href={wa}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Abrir no WhatsApp — ver se é empresa ou pessoa"
+                    aria-label={`Abrir ${fmtPhone(p.n)} no WhatsApp`}
+                    className="rounded-r-lg border-l border-white/20 bg-emerald-600 px-3 py-2 text-base font-semibold text-white hover:bg-emerald-500 dark:border-zinc-900/20"
+                  >
+                    💬
+                  </a>
+                )}
+              </span>
+            );
+          })}
           <ButtonLink href={`/targets/${t.id}/email?back=fila`} variant="secondary" className="rounded-lg px-4 py-2">
             ✉️ e-mail
           </ButtonLink>
