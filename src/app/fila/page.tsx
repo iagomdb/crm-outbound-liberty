@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/auth/dal";
 import { getDailyQueue, getOrphans, getTodayStats, type FilaItem } from "@/db/queries";
+import { getContaAtiva } from "@/lib/conta-server";
 import { deathFor, deathLabel, DEATH_CLASSES } from "@/core/death";
 import { STAGE_LABELS } from "@/core/pipeline";
 import { goldenHourLabel } from "@/core/golden-hours";
@@ -77,7 +78,8 @@ function Section({ title, cls, items, hintFor }: { title: string; cls: string; i
 
 export default async function FilaPage() {
   await requireUser();
-  const [q, stats, orphans] = await Promise.all([getDailyQueue(), getTodayStats(), getOrphans()]);
+  const conta = await getContaAtiva();
+  const [q, stats, orphans] = await Promise.all([getDailyQueue(conta), getTodayStats(conta), getOrphans(conta)]);
   const gh = GH_UI[goldenHourLabel()];
   const total = q.atrasadas.length + q.hoje.length + q.estadoZero.length;
   const first = [...q.atrasadas, ...q.hoje, ...q.estadoZero][0];
@@ -86,7 +88,9 @@ export default async function FilaPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Fila do Dia</h1>
+          <h1 className="text-xl font-semibold">
+            Fila do Dia{conta ? <span className="text-zinc-400"> · {conta}</span> : null}
+          </h1>
           <p className="text-sm text-zinc-500">{total} tasks — desce de cima pra baixo, uma decisão por lead</p>
         </div>
         <div className="flex items-center gap-2">
@@ -130,8 +134,9 @@ export default async function FilaPage() {
 
       {total === 0 && (
         <p className="rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950">
-          Fila vazia. Importe empresas (<code className="rounded bg-zinc-200 px-1 dark:bg-zinc-800">npm run import</code>) e
-          faça a triagem de ICP na campanha.
+          Fila vazia{conta ? ` na conta “${conta}”` : ""}. Importe empresas (
+          <code className="rounded bg-zinc-200 px-1 dark:bg-zinc-800">npm run import</code>) e faça a triagem de ICP na
+          campanha{conta ? " — ou troque de conta no topo" : ""}.
         </p>
       )}
 

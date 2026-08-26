@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/auth/dal";
 import { getCampaignsWithStats } from "@/db/queries";
+import { getContaAtiva } from "@/lib/conta-server";
 import { ButtonLink, Field, Input, Select } from "@/components/ui";
 import { PendingButton, PendingNote } from "@/components/PendingButton";
 import { IMPORT_FIELDS, analyzeSheet, loadWorkbook, type ImportPreview, type SheetAnalysis } from "@/core/import";
@@ -87,7 +88,7 @@ export default async function MapeamentoPage({
     );
   }
 
-  const [meta, camps] = await Promise.all([readMeta(token), getCampaignsWithStats()]);
+  const [meta, camps] = await Promise.all([readMeta(token), getCampaignsWithStats(await getContaAtiva())]);
   const state = parseJson<MappingState>(m);
   const preview = parseJson<ImportPreview>(p);
 

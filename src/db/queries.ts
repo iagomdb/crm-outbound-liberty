@@ -11,14 +11,56 @@ export type CampaignStats = {
   name: string;
   slug: string | null;
   status: string;
+  conta: string | null;
   total: number;
   byStage: Record<string, number>;
 };
 
-/** Campanhas + contagem de alvos por estágio (pro overview). */
-export async function getCampaignsWithStats(): Promise<CampaignStats[]> {
+// ---------------------------------------------------------------- conta (agrupador acima da carteira)
+
+/**
+ * Filtro de conta pra queries que JÁ fazem join com `campaigns`.
+ * null (= todas as contas) devolve undefined: drizzle ignora no and()/where().
+ */
+const byConta = (conta: string | null) => (conta ? eq(campaigns.conta, conta) : undefined);
+
+/**
+ * Mesmo filtro pra queries que só tocam `targets` (sem join com campaigns):
+ * restringe às carteiras da conta via subquery.
+ */
+function targetsDaConta(conta: string | null) {
+  if (!conta) return undefined;
+  return inArray(
+    targets.campaignId,
+    getDb().select({ id: campaigns.id }).from(campaigns).where(eq(campaigns.conta, conta)),
+  );
+}
+
+/** Contas cadastradas nas carteiras (alimenta o seletor do header). */
+export async function getContas(): Promise<string[]> {
   const db = getDb();
-  const camps = await db.select().from(campaigns).orderBy(asc(campaigns.createdAt));
+  const rows = await db
+    .selectDistinct({ conta: campaigns.conta })
+    .from(campaigns)
+    .where(sql`nullif(trim(${campaigns.conta}), '') is not null`)
+    .orderBy(asc(campaigns.conta));
+  return rows.map((r) => r.conta!).filter(Boolean);
+}
+
+/** Quantas carteiras ainda estão sem conta — elas somem quando há filtro ativo. */
+export async function countCarteirasSemConta(): Promise<number> {
+  const db = getDb();
+  const [r] = await db
+    .select({ n: count() })
+    .from(campaigns)
+    .where(sql`nullif(trim(${campaigns.conta}), '') is null`);
+  return r?.n ?? 0;
+}
+
+/** Campanhas + contagem de alvos por estágio (pro overview). */
+export async function getCampaignsWithStats(conta: string | null = null): Promise<CampaignStats[]> {
+  const db = getDb();
+  const camps = await db.select().from(campaigns).where(byConta(conta)).orderBy(asc(campaigns.createdAt));
   const rows = await db
     .select({ campaignId: targets.campaignId, stage: targets.stage, n: count() })
     .from(targets)
@@ -32,7 +74,7 @@ export async function getCampaignsWithStats(): Promise<CampaignStats[]> {
       byStage[r.stage] = r.n;
       total += r.n;
     }
-    return { id: c.id, name: c.name, slug: c.slug, status: c.status, total, byStage };
+    return { id: c.id, name: c.name, slug: c.slug, status: c.status, conta: c.conta, total, byStage };
   });
 }
 
@@ -45,7 +87,7 @@ export async function getCampaignBySlug(slug: string) {
 // ---------------------------------------------------------------- estatísticas de ICP
 
 /** Linhas cruas pro dashboard de ICP (o cálculo fica em core/icp-stats.ts). */
-export async function getIcpRawData(): Promise<{
+export async function getIcpRawData(conta: string | null = null): Promise<{
   camps: { id: string; name: string; slug: string | null; status: string }[];
   rawTargets: IcpRawTarget[];
   rawCalls: IcpRawCall[];
@@ -56,6 +98,7 @@ export async function getIcpRawData(): Promise<{
   const camps = await db
     .select({ id: campaigns.id, name: campaigns.name, slug: campaigns.slug, status: campaigns.status })
     .from(campaigns)
+    .where(byConta(conta))
     .orderBy(asc(campaigns.createdAt));
 
   const rawTargets: IcpRawTarget[] = await db
@@ -66,7 +109,8 @@ export async function getIcpRawData(): Promise<{
       tipoCobranca: companies.tipoCobranca,
     })
     .from(targets)
-    .innerJoin(companies, eq(targets.companyId, companies.id));
+    .innerJoin(companies, eq(targets.companyId, companies.id))
+    .where(targetsDaConta(conta));
 
   const callRows = await db
     .select({
@@ -84,7 +128,7 @@ export async function getIcpRawData(): Promise<{
     .from(activities)
     .innerJoin(targets, eq(activities.targetId, targets.id))
     .leftJoin(contacts, eq(activities.contactId, contacts.id))
-    .where(eq(activities.type, "ligacao"));
+    .where(and(eq(activities.type, "ligacao"), targetsDaConta(conta)));
 
   const rawCalls: IcpRawCall[] = callRows.map((r) => ({
     targetId: r.targetId,
@@ -102,7 +146,8 @@ export async function getIcpRawData(): Promise<{
   const rawMeetings: IcpRawMeeting[] = await db
     .select({ campaignId: targets.campaignId, targetId: meetings.targetId })
     .from(meetings)
-    .innerJoin(targets, eq(meetings.targetId, targets.id));
+    .innerJoin(targets, eq(meetings.targetId, targets.id))
+    .where(targetsDaConta(conta));
 
   return { camps, rawTargets, rawCalls, rawMeetings };
 }
@@ -125,7 +170,7 @@ const ROLETA_STAGES: Stage[] = ["novo", "fit"];
 export type RoletaCampaign = { id: string; name: string; slug: string | null; disponiveis: number };
 
 /** Carteiras ativas + quantos alvos "novo"/"fit" cada uma tem disponíveis pro sorteio. */
-export async function getRoletaCampaigns(): Promise<RoletaCampaign[]> {
+export async function getRoletaCampaigns(conta: string | null = null): Promise<RoletaCampaign[]> {
   const db = getDb();
   return db
     .select({ id: campaigns.id, name: campaigns.name, slug: campaigns.slug, disponiveis: count(targets.id) })
@@ -134,7 +179,7 @@ export async function getRoletaCampaigns(): Promise<RoletaCampaign[]> {
       targets,
       and(eq(targets.campaignId, campaigns.id), isNull(targets.archivedAt), inArray(targets.stage, ROLETA_STAGES)),
     )
-    .where(eq(campaigns.status, "ativa"))
+    .where(and(eq(campaigns.status, "ativa"), byConta(conta)))
     .groupBy(campaigns.id)
     .orderBy(asc(campaigns.createdAt));
 }
@@ -174,10 +219,11 @@ export async function getQueue(campaignId: string) {
 }
 
 /** Agenda: todos os retornos agendados (nextActionAt) de leads ativos, por data. */
-export async function getAgenda() {
+export async function getAgenda(conta: string | null = null) {
   const db = getDb();
   return db.query.targets.findMany({
-    where: (t, { and, isNotNull, isNull }) => and(isNotNull(t.nextActionAt), isNull(t.archivedAt)),
+    where: (t, { and, isNotNull, isNull }) =>
+      and(isNotNull(t.nextActionAt), isNull(t.archivedAt), targetsDaConta(conta)),
     with: { company: true, campaign: true },
     orderBy: (t, { asc }) => [asc(t.nextActionAt)],
     limit: 300,
@@ -281,7 +327,7 @@ const activeTarget = and(isNull(targets.archivedAt), notInArray(targets.stage, C
  * A Fila do Dia: atrasadas → hoje → estado zero (novos triados como fit, a
  * "task implícita" da primeira ligação). Desce de cima pra baixo e liga.
  */
-export async function getDailyQueue(now = new Date()) {
+export async function getDailyQueue(conta: string | null = null, now = new Date()) {
   const db = getDb();
   const startToday = new Date(now);
   startToday.setHours(0, 0, 0, 0);
@@ -293,8 +339,11 @@ export async function getDailyQueue(now = new Date()) {
     .from(targets)
     .innerJoin(companies, eq(targets.companyId, companies.id))
     .innerJoin(campaigns, eq(targets.campaignId, campaigns.id))
-    .where(and(isNull(targets.archivedAt), lt(targets.nextActionAt, startTomorrow)))
-    .orderBy(asc(targets.nextActionAt))
+    .where(and(isNull(targets.archivedAt), lt(targets.nextActionAt, startTomorrow), byConta(conta)))
+    // desempate obrigatório: o cursor de "próxima" é por POSIÇÃO, e nextActionAt
+    // empata o tempo todo (a escada 7/14 joga todo mundo pras 9h). Sem critério
+    // estável o Postgres devolveria ordens diferentes a cada request.
+    .orderBy(asc(targets.nextActionAt), desc(targets.priority), asc(targets.id))
     .limit(200);
 
   const estadoZero = await db
@@ -309,9 +358,10 @@ export async function getDailyQueue(now = new Date()) {
         eq(targets.stage, "fit"),
         eq(targets.attempts, 0),
         isNull(targets.nextActionAt),
+        byConta(conta),
       ),
     )
-    .orderBy(desc(targets.priority), asc(targets.createdAt))
+    .orderBy(desc(targets.priority), asc(targets.createdAt), asc(targets.id))
     .limit(200);
 
   return {
@@ -321,11 +371,25 @@ export async function getDailyQueue(now = new Date()) {
   };
 }
 
-/** Próximo alvo da fila (modo discagem: zero cliques entre ligações). */
-export async function getNextInQueue(excludeTargetId: string): Promise<string | null> {
-  const q = await getDailyQueue();
-  const next = [...q.atrasadas, ...q.hoje, ...q.estadoZero].find((t) => t.id !== excludeTargetId);
-  return next?.id ?? null;
+/**
+ * Próximo alvo da fila (modo discagem: zero cliques entre ligações).
+ *
+ * CURSOR POR POSIÇÃO, não "o topo da fila": devolve quem vem DEPOIS do atual
+ * na ordem. Pegar sempre o topo fazia ping-pong — pular o primeiro de
+ * propósito e cair de volta nele no clique seguinte. Quem foi pulado continua
+ * na fila (ninguém decidiu nada sobre ele) mas você desce sempre pra frente;
+ * fim da fila ⇒ null e a tela volta pra /fila, com os pulados à vista.
+ *
+ * Alvo fora da fila (aberto pela ficha, ou já resolvido nesta ligação) cai no
+ * fallback: o topo, excluindo ele mesmo. Por isso o registro de ligação
+ * calcula a próxima ANTES de gravar, enquanto o alvo ainda tem posição.
+ */
+export async function getNextInQueue(currentTargetId: string, conta: string | null = null): Promise<string | null> {
+  const q = await getDailyQueue(conta);
+  const list = [...q.atrasadas, ...q.hoje, ...q.estadoZero];
+  const i = list.findIndex((t) => t.id === currentTargetId);
+  if (i === -1) return list.find((t) => t.id !== currentTargetId)?.id ?? null;
+  return list[i + 1]?.id ?? null;
 }
 
 /**
@@ -333,7 +397,7 @@ export async function getNextInQueue(excludeTargetId: string): Promise<string | 
  * terminal — não deveria existir depois da regra de ouro. Estado zero
  * (novo, 0 tentativas) não é órfão: ainda nem entrou no ciclo.
  */
-export async function getOrphans() {
+export async function getOrphans(conta: string | null = null) {
   const db = getDb();
   return db
     .select(filaRow)
@@ -343,6 +407,7 @@ export async function getOrphans() {
     .where(
       and(
         activeTarget,
+        byConta(conta),
         isNull(targets.nextActionAt),
         // pré-ciclo (novo/fit sem tentativa) não é órfão: ainda nem entrou no ciclo
         not(and(inArray(targets.stage, ["novo", "fit"]), eq(targets.attempts, 0))!),
@@ -352,7 +417,7 @@ export async function getOrphans() {
 }
 
 /** Medição do dia (roadmap Fase 5): discadas / conversas / reuniões de HOJE. */
-export async function getTodayStats() {
+export async function getTodayStats(conta: string | null = null) {
   const db = getDb();
   const today = sql`date_trunc('day', now())`;
   const [a] = await db
@@ -361,11 +426,13 @@ export async function getTodayStats() {
       conversas: sql<number>`(count(*) filter (where ${activities.reachedHuman}))::int`,
     })
     .from(activities)
-    .where(sql`${activities.occurredAt} >= ${today}`);
+    .innerJoin(targets, eq(activities.targetId, targets.id))
+    .where(and(sql`${activities.occurredAt} >= ${today}`, targetsDaConta(conta)));
   const [m] = await db
     .select({ reunioes: sql<number>`(count(*))::int` })
     .from(meetings)
-    .where(sql`${meetings.createdAt} >= ${today}`);
+    .innerJoin(targets, eq(meetings.targetId, targets.id))
+    .where(and(sql`${meetings.createdAt} >= ${today}`, targetsDaConta(conta)));
   return { discadas: a?.discadas ?? 0, conversas: a?.conversas ?? 0, reunioes: m?.reunioes ?? 0 };
 }
 

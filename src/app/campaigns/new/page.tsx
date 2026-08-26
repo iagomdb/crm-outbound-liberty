@@ -2,12 +2,15 @@ import Link from "next/link";
 import { requireUser } from "@/auth/dal";
 import { Button, Field, Input, Select, Textarea } from "@/components/ui";
 import { ChecklistEditor } from "@/components/ChecklistEditor";
+import { getContas } from "@/db/queries";
+import { getContaAtiva } from "@/lib/conta-server";
 import { createCampaign } from "../actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewCampaignPage() {
   await requireUser();
+  const [contas, contaAtiva] = await Promise.all([getContas(), getContaAtiva()]);
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-5">
@@ -23,9 +26,19 @@ export default async function NewCampaignPage() {
       </div>
 
       <form action={createCampaign} className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
-        <Field label="Nome *">
-          <Input name="name" required placeholder="ex.: Recuperação de Crédito — RS" />
-        </Field>
+        <div className="grid gap-3 sm:grid-cols-[1fr_260px]">
+          <Field label="Nome *">
+            <Input name="name" required placeholder="ex.: Recuperação de Crédito — RS" />
+          </Field>
+          <Field label="Conta" hint="pra quem é essa prospecção — agrupa carteiras no seletor do topo">
+            <Input name="conta" list="contas-existentes" defaultValue={contaAtiva ?? ""} placeholder="ex.: Meu" />
+            <datalist id="contas-existentes">
+              {contas.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
+          </Field>
+        </div>
         <Field label="Descrição">
           <Textarea name="description" rows={2} placeholder="o que essa carteira persegue" />
         </Field>

@@ -3,6 +3,9 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { getSessionUser } from "@/auth/dal";
 import { LogoutButton } from "@/components/LogoutButton";
+import { ContaSwitcher } from "@/components/ContaSwitcher";
+import { getContas } from "@/db/queries";
+import { getContaAtiva } from "@/lib/conta-server";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ThemeScript } from "@/components/ThemeScript";
 import "./globals.css";
@@ -21,6 +24,8 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   // só pra montar o header (nome + Sair); a proteção das rotas é do proxy + DAL,
   // não do layout (layout não re-renderiza a cada navegação)
   const user = await getSessionUser();
+  // seletor de conta só faz sentido logado (e evita bater no banco no /login)
+  const [contas, contaAtiva] = user ? await Promise.all([getContas(), getContaAtiva()]) : [[], null];
 
   return (
     <html lang="pt-BR" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
@@ -36,6 +41,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
               </Link>
               {user && (
                 <>
+                  <ContaSwitcher contas={contas} ativa={contaAtiva} />
                   <Link href="/fila" className={`${navLink} font-medium text-zinc-900 dark:text-zinc-100`}>
                     Fila do Dia
                   </Link>

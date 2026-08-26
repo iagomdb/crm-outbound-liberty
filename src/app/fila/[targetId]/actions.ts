@@ -7,6 +7,7 @@ import { getDb } from "@/db";
 import { recordCall } from "@/core/log-call";
 import { parseCallForm } from "@/lib/call-form";
 import { getNextInQueue, getRandomRoletaTarget } from "@/db/queries";
+import { getContaAtiva } from "@/lib/conta-server";
 
 /**
  * Modo discagem: registra a ligação (regra de ouro gera a próxima task) e
@@ -15,15 +16,21 @@ import { getNextInQueue, getRandomRoletaTarget } from "@/db/queries";
  */
 export async function logCallAndNext(targetId: string, roletaSlugs: string[] | null, formData: FormData) {
   await requireUser();
+  const conta = await getContaAtiva();
+
+  // a próxima sai da fila ANTES do registro: depois de gravar, este alvo já
+  // ganhou task futura e sumiu da fila — sem posição, o cursor cairia no topo
+  // (o ping-pong que a gente acabou de matar).
+  const nextId = roletaSlugs?.length ? null : await getNextInQueue(targetId, conta);
+
   await recordCall(getDb(), targetId, parseCallForm(formData));
   revalidatePath("/", "layout");
 
   if (roletaSlugs?.length) {
-    const nextId = await getRandomRoletaTarget(roletaSlugs, targetId);
-    if (!nextId) redirect(`/roleta?err=${encodeURIComponent("acabaram as empresas disponíveis nessas carteiras")}`);
-    redirect(`/fila/${nextId}?roleta=${encodeURIComponent(roletaSlugs.join(","))}`);
+    const sorteado = await getRandomRoletaTarget(roletaSlugs, targetId);
+    if (!sorteado) redirect(`/roleta?err=${encodeURIComponent("acabaram as empresas disponíveis nessas carteiras")}`);
+    redirect(`/fila/${sorteado}?roleta=${encodeURIComponent(roletaSlugs.join(","))}`);
   }
 
-  const nextId = await getNextInQueue(targetId);
   redirect(nextId ? `/fila/${nextId}` : "/fila");
 }

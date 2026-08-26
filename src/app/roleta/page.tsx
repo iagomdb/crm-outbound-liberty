@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/auth/dal";
 import { getRoletaCampaigns, getTodayStats } from "@/db/queries";
+import { getContaAtiva } from "@/lib/conta-server";
 import { Button } from "@/components/ui";
 import { sortear } from "./actions";
 
@@ -14,7 +15,8 @@ export const dynamic = "force-dynamic";
 export default async function RoletaPage({ searchParams }: { searchParams: Promise<{ err?: string }> }) {
   await requireUser();
   const { err } = await searchParams;
-  const [camps, hoje] = await Promise.all([getRoletaCampaigns(), getTodayStats()]);
+  const conta = await getContaAtiva();
+  const [camps, hoje] = await Promise.all([getRoletaCampaigns(conta), getTodayStats(conta)]);
 
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-5">
@@ -28,7 +30,7 @@ export default async function RoletaPage({ searchParams }: { searchParams: Promi
           <strong>fit</strong> — cada ligação registrada sorteia a próxima, misturando os segmentos marcados.
         </p>
         <p className="mt-1 text-sm tabular-nums text-zinc-500">
-          hoje (todas as carteiras): <strong className="text-zinc-900 dark:text-zinc-100">{hoje.discadas}</strong>{" "}
+          hoje{conta ? ` (${conta})` : " (todas as contas)"}: <strong className="text-zinc-900 dark:text-zinc-100">{hoje.discadas}</strong>{" "}
           discadas · <strong className="text-zinc-900 dark:text-zinc-100">{hoje.conversas}</strong> conversas ·{" "}
           <strong className="text-zinc-900 dark:text-zinc-100">{hoje.reunioes}</strong> reuniões
         </p>

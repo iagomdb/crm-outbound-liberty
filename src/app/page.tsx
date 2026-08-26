@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/auth/dal";
-import { getCampaignsWithStats, getDailyQueue, getTodayStats } from "@/db/queries";
+import { countCarteirasSemConta, getCampaignsWithStats, getDailyQueue, getTodayStats } from "@/db/queries";
+import { getContaAtiva } from "@/lib/conta-server";
 import { STAGE_LABELS, STAGE_ORDER, type Stage } from "@/core/pipeline";
 import { ButtonLink, Badge } from "@/components/ui";
 
@@ -8,7 +9,13 @@ export const dynamic = "force-dynamic";
 
 export default async function Home() {
   await requireUser();
-  const [camps, stats, q] = await Promise.all([getCampaignsWithStats(), getTodayStats(), getDailyQueue()]);
+  const conta = await getContaAtiva();
+  const [camps, stats, q, semConta] = await Promise.all([
+    getCampaignsWithStats(conta),
+    getTodayStats(conta),
+    getDailyQueue(conta),
+    countCarteirasSemConta(),
+  ]);
   const naFila = q.atrasadas.length + q.hoje.length + q.estadoZero.length;
 
   return (
@@ -27,14 +34,24 @@ export default async function Home() {
           </p>
         </div>
         <div className="text-sm tabular-nums text-zinc-500">
-          hoje: <strong className="text-zinc-900 dark:text-zinc-100">{stats.discadas}</strong> discadas ·{" "}
+          hoje{conta ? ` em ${conta}` : ""}: <strong className="text-zinc-900 dark:text-zinc-100">{stats.discadas}</strong> discadas ·{" "}
           <strong className="text-zinc-900 dark:text-zinc-100">{stats.conversas}</strong> conversas ·{" "}
           <strong className="text-zinc-900 dark:text-zinc-100">{stats.reunioes}</strong> reuniões
         </div>
       </Link>
 
+      {/* carteira sem conta some do app enquanto houver filtro — avisa em vez de sumir calado */}
+      {semConta > 0 && (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+          ⚠ {semConta} carteira(s) sem conta definida — elas só aparecem no modo “Todas as contas”. Abra a carteira →
+          editar e escolha a conta.
+        </p>
+      )}
+
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Campanhas</h1>
+        <h1 className="text-xl font-semibold">
+          Campanhas{conta ? <span className="text-zinc-400"> · {conta}</span> : null}
+        </h1>
         <div className="flex gap-2">
           <ButtonLink href="/roleta" size="sm" variant="secondary">
             🎲 roleta
@@ -67,7 +84,9 @@ export default async function Home() {
                 {c.status}
               </Badge>
             </div>
-            <p className="mt-1 text-sm text-zinc-500">{c.total} empresas</p>
+            <p className="mt-1 text-sm text-zinc-500">
+              {c.total} empresas{!conta && c.conta ? ` · ${c.conta}` : ""}
+            </p>
             <div className="mt-3 flex flex-wrap gap-1.5">
               {STAGE_ORDER.filter((s) => c.byStage[s]).map((s) => (
                 <Badge key={s} tone="neutral" className="px-1.5">

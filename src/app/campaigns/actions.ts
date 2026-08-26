@@ -35,6 +35,7 @@ export async function createCampaign(fd: FormData) {
     .values({
       name,
       slug,
+      conta: s(fd.get("conta")) || null,
       description: s(fd.get("description")) || null,
       offerTerms: s(fd.get("offerTerms")) || null,
       icp: s(fd.get("icp")) || null,
@@ -60,6 +61,7 @@ export async function updateCampaign(campaignId: string, fd: FormData) {
     .update(campaigns)
     .set({
       name,
+      conta: s(fd.get("conta")) || null,
       description: s(fd.get("description")) || null,
       offerTerms: s(fd.get("offerTerms")) || null,
       icp: s(fd.get("icp")) || null,

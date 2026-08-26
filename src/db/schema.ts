@@ -3,6 +3,7 @@
  * não é CRM genérico.
  *
  *   campaigns  → o "projeto"/oferta (multi-campanha). #1 = Recuperação de Crédito
+ *                agrupadas por `conta` = pra quem a prospecção é feita
  *   companies  → global, chave = CNPJ (dados do export consultas.plus)
  *   contacts   → pessoa na empresa (papel: atendente/analista/decisor; email nominal vs genérico)
  *   targets    → empresa ↔ campanha = o registro de pipeline (estágio, cadência, pretexto novo)
@@ -111,6 +112,13 @@ export const campaigns = pgTable("campaigns", {
   id: uuid().defaultRandom().primaryKey(),
   name: text().notNull(),
   slug: text().unique(),
+  /**
+   * Pra QUEM essa prospecção é feita ("Meu", "Liberty", ...). É o agrupador
+   * acima da carteira: o seletor no topo do app fixa uma conta e fila, agenda,
+   * roleta e contadores passam a enxergar só as carteiras dela. null = sem
+   * conta definida (só aparece no modo "todas as contas").
+   */
+  conta: text(),
   description: text(),
   offerTerms: text(), // condições travadas ("só paga se recuperar", caso único)
   icp: text(), // definição do ICP dessa campanha

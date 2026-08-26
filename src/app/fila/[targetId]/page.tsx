@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/auth/dal";
 import { getNextInQueue, getTargetDetail, getTodayStats } from "@/db/queries";
+import { getContaAtiva } from "@/lib/conta-server";
 import { StageBadge } from "@/components/StageBadge";
 import { CallLogForm } from "@/components/CallLogForm";
 import { ActivityHistory } from "@/components/ActivityHistory";
@@ -51,10 +52,11 @@ export default async function TaskPage({
   const { roleta } = await searchParams;
   // modo roleta: veio de /roleta — a "próxima" é sorteada nas carteiras marcadas
   const roletaSlugs = roleta ? roleta.split(",").filter(Boolean) : null;
+  const conta = await getContaAtiva();
   const [t, nextId, hoje] = await Promise.all([
     getTargetDetail(targetId),
-    getNextInQueue(targetId),
-    getTodayStats(),
+    getNextInQueue(targetId, conta),
+    getTodayStats(conta),
   ]);
   if (!t) notFound();
 

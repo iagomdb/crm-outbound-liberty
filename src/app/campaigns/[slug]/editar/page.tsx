@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/auth/dal";
-import { getCampaignBySlug, getChecklistItems } from "@/db/queries";
+import { getCampaignBySlug, getChecklistItems, getContas } from "@/db/queries";
 import { ConfirmButton } from "@/components/ConfirmButton";
 import { ChecklistEditor } from "@/components/ChecklistEditor";
 import { Button, Field, Input, Select, Textarea } from "@/components/ui";
@@ -14,7 +14,7 @@ export default async function EditCampaignPage({ params }: { params: Promise<{ s
   const { slug } = await params;
   const campaign = await getCampaignBySlug(slug);
   if (!campaign) notFound();
-  const items = await getChecklistItems(campaign.id);
+  const [items, contas] = await Promise.all([getChecklistItems(campaign.id), getContas()]);
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-5">
@@ -32,9 +32,19 @@ export default async function EditCampaignPage({ params }: { params: Promise<{ s
         action={updateCampaign.bind(null, campaign.id)}
         className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950"
       >
-        <Field label="Nome *">
-          <Input name="name" required defaultValue={campaign.name} />
-        </Field>
+        <div className="grid gap-3 sm:grid-cols-[1fr_260px]">
+          <Field label="Nome *">
+            <Input name="name" required defaultValue={campaign.name} />
+          </Field>
+          <Field label="Conta" hint="pra quem é essa prospecção — agrupa carteiras no seletor do topo">
+            <Input name="conta" list="contas-existentes" defaultValue={campaign.conta ?? ""} placeholder="ex.: Meu" />
+            <datalist id="contas-existentes">
+              {contas.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
+          </Field>
+        </div>
         <Field label="Descrição">
           <Textarea name="description" rows={2} defaultValue={campaign.description ?? ""} />
         </Field>
