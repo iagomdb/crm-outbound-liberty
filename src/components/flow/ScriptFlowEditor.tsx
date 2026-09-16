@@ -10,9 +10,11 @@ import {
   atualizarNo,
   criarNo,
   desligar,
+  duplicarNo,
   ligarExistente,
   moverNo,
   type CriarState,
+  type DuplicarState,
 } from "@/app/campaigns/[slug]/fluxo/actions";
 import { FlowColumns, FlowTrail } from "./FlowColumns";
 
@@ -87,6 +89,9 @@ export function ScriptFlowEditor({ campaignId, graph }: { campaignId: string; gr
           candidatos={graph.nodes.filter(
             (n) => n.id !== atual.id && !(ix.filhos.get(atual.id) ?? []).some((f) => f.id === n.id),
           )}
+          filhosCount={ix.filhos.get(atual.id)?.length ?? 0}
+          // a variação nasce irmã do original: seleciona ela no MESMO nível
+          onDuplicado={(id) => setCaminho([...caminho.slice(0, nivelAtual), id])}
           onApagado={() => setCaminho(caminho.slice(0, nivelAtual))}
         />
       )}
@@ -202,17 +207,32 @@ function NoEditor({
   node,
   paiId,
   paisCount,
+  filhosCount,
   candidatos,
+  onDuplicado,
   onApagado,
 }: {
   node: FlowGraph["nodes"][number];
   paiId: string | null;
   paisCount: number;
+  filhosCount: number;
   candidatos: FlowGraph["nodes"];
+  onDuplicado: (novoId: string) => void;
   onApagado: () => void;
 }) {
   const [ligarId, setLigarId] = useState("");
+  const [dup, duplicarAction, duplicando] = useActionState<DuplicarState, FormData>(
+    duplicarNo.bind(null, node.id),
+    {},
+  );
   const c = KIND_CLASSES[node.kind];
+
+  // duplicou ⇒ abre a variação na hora: o ponto é reescrever a fala em seguida
+  useEffect(() => {
+    if (dup.novoId) onDuplicado(dup.novoId);
+    // onDuplicado muda a cada render do pai; só o id novo deve disparar
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dup.novoId]);
 
   return (
     <div className={`flex flex-col gap-3 rounded-xl border-l-4 border-y border-r p-4 ${c.on}`}>
@@ -267,6 +287,21 @@ function NoEditor({
             </button>
           </form>
         </span>
+
+        <form action={duplicarAction}>
+          <button
+            type="submit"
+            disabled={duplicando}
+            className={mini}
+            title={
+              filhosCount
+                ? `cria uma variação aqui do lado, caindo nos mesmos ${filhosCount} próximos passos — pra testar outra redação da mesma fala`
+                : "cria uma cópia deste passo aqui do lado"
+            }
+          >
+            {duplicando ? "duplicando…" : "⧉ duplicar variação"}
+          </button>
+        </form>
 
         <form action={ligarExistente.bind(null, node.id, ligarId)} className="flex items-center gap-1">
           <select

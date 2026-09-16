@@ -6,6 +6,7 @@ import { requireUser } from "@/auth/dal";
 import { getDb } from "@/db";
 import { scriptEdges, scriptNodes } from "@/db/schema";
 import type { NodeKind } from "@/core/script-flow";
+import { duplicarPasso } from "@/core/script-flow-edit";
 
 // Edição do FLUXO (grafo do script da carteira). Uma operação por action: o
 // editor é a mesma tela de colunas da discagem, então cada mexida é pequena e
@@ -63,6 +64,33 @@ export async function criarNo(
 
   refresh();
   return { novoId: novo.id };
+}
+
+export type DuplicarState = { novoId?: string; erro?: string };
+
+/**
+ * Duplica o passo como VARIAÇÃO: a cópia nasce no mesmo lugar (mesmos pais) e
+ * apontando pros MESMOS próximos passos. É o atalho pro caso "abertura 1, 2 e 3
+ * são redações diferentes que caem no mesmo galho" — sem isto, cada abertura
+ * nova exigiria pendurar os oito filhos na mão, um por um.
+ *
+ * A cópia compartilha os filhos, não clona a subárvore. Clonar fragmentaria a
+ * estatística: o objetivo é medir qual REDAÇÃO converte melhor, com o resto da
+ * conversa igual. Se um galho precisar divergir depois, é só "tirar deste
+ * galho" o filho que não serve pra essa variação.
+ *
+ * A mecânica mora em core/script-flow-edit.ts (testável fora do Next).
+ *
+ * Só recebe o id: o `(prev, formData)` que o useActionState manda é ignorado —
+ * não há nada pra ler do form, e devolver o id da cópia é o que importa (o
+ * editor abre ela na hora pra você reescrever a fala).
+ */
+export async function duplicarNo(nodeId: string): Promise<DuplicarState> {
+  await requireUser();
+  const novoId = await duplicarPasso(getDb(), nodeId);
+  if (!novoId) return { erro: "passo não encontrado" };
+  refresh();
+  return { novoId };
 }
 
 /** Salva o conteúdo do passo — é o mesmo nó em todos os galhos onde ele aparece. */
