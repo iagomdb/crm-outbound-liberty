@@ -9,5 +9,11 @@ import { headers } from "next/headers";
 
 export async function ThemeScript() {
   const nonce = (await headers()).get("x-nonce") ?? undefined;
-  return <script src="/theme-init.js" nonce={nonce} />;
+  // suppressHydrationWarning por causa do NONCE, não do tema: a spec de CSP manda
+  // o browser esvaziar o atributo `nonce` do DOM assim que processa o elemento
+  // (senão dava pra vazar o nonce com um seletor de CSS). Na hidratação o React
+  // acha nonce="" no DOM, compara com o nonce real que ele renderizaria e grita.
+  // O script já executou — a divergência é da spec, não do nosso HTML, e não tem
+  // como conciliar. Só este elemento fica suprimido.
+  return <script src="/theme-init.js" nonce={nonce} suppressHydrationWarning />;
 }
