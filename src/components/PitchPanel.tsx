@@ -112,7 +112,9 @@ export function PitchPanel({
         <span className="ml-auto truncate text-xs text-zinc-400">{campaignName}</span>
       </div>
 
-      <div className={`${contentMaxH} overflow-y-auto p-5`}>
+      {/* o Fluxo usa a largura toda (as colunas precisam dela); Pitch e Checklist
+          são texto corrido e ficam ilegíveis esticados — daí o teto de largura */}
+      <div className={`${contentMaxH} overflow-y-auto p-5 ${tab === "fluxo" ? "" : "max-w-3xl"}`}>
         {tab === "fluxo" && <ScriptFlow graph={graph} editHref={fluxoHref} />}
 
         {tab === "pitch" &&

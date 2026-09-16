@@ -7,6 +7,7 @@ import { StageBadge } from "@/components/StageBadge";
 import { CallLogForm } from "@/components/CallLogForm";
 import { ActivityHistory } from "@/components/ActivityHistory";
 import { PitchPanel } from "@/components/PitchPanel";
+import { FalaBox } from "@/components/flow/FalaBox";
 import { Markdown } from "@/components/Markdown";
 import { ContactsSection } from "../../targets/[id]/_sections/ContactsSection";
 import { CompanySection } from "../../targets/[id]/_sections/CompanySection";
@@ -267,8 +268,29 @@ export default async function TaskPage({
         )}
       </section>
 
-      {/* pitch fixo na direita; operação (registro, contatos, empresa, histórico) na esquerda */}
-      <div className="grid gap-6 lg:grid-cols-[1fr_440px] 2xl:grid-cols-[1fr_700px]">
+      {/* O FLUXO ocupa a largura inteira: as colunas da conversa só servem se
+          couberem lado a lado. Espremido nos 440px da direita cabiam 2 e o resto
+          virava scroll horizontal no meio da ligação — o pior momento pra
+          procurar coisa. key zera o caminho e os checks a cada empresa. */}
+      <PitchPanel
+        key={t.id}
+        campaignName={t.campaign.name}
+        editHref={t.campaign.slug ? `/campaigns/${t.campaign.slug}/editar` : null}
+        fluxoHref={t.campaign.slug ? `/campaigns/${t.campaign.slug}/fluxo` : null}
+        graph={graph}
+        items={t.campaign.checklistItems}
+        hasScript={Boolean(t.campaign.script)}
+        contentMaxH="max-h-[46vh]"
+      >
+        {t.campaign.script && <Markdown text={t.campaign.script} />}
+      </PitchPanel>
+
+      {/* a fala do passo aberto, em caixa própria: é o texto lido em voz alta,
+          então quer largura e altura só dele. Some enquanto nada foi escolhido. */}
+      <FalaBox />
+
+      {/* registro fixo na direita; ficha (contatos, empresa, alvo, histórico) na esquerda */}
+      <div className="grid gap-6 lg:grid-cols-[1fr_440px] 2xl:grid-cols-[1fr_560px]">
         <div className="flex flex-col gap-6">
           {/* memória da última ligação */}
           <Card title="🧠 Onde parou (última ligação)">
@@ -313,23 +335,6 @@ export default async function TaskPage({
             {t.notes && <p className="mt-3 border-t border-zinc-100 pt-2 text-xs text-zinc-500 dark:border-zinc-900">obs. do alvo: {t.notes}</p>}
           </Card>
 
-          {/* registrar → regra de ouro → próxima (da fila ou sorteada) */}
-          <Card title="Registrar ligação">
-            <CallLogForm
-              key={t.activities.length}
-              action={logCallAndNext.bind(null, t.id, roletaSlugs)}
-              contacts={contacts}
-              stageOptions={stageOptions}
-              objectionOptions={objectionOptions}
-              objectiveOptions={objectiveOptions}
-              mentalOptions={mentalOptions}
-              typeOptions={typeOptions}
-              roleLabels={ROLE_LABELS}
-              defaultNextActionAt={toDatetimeLocal(addDays(new Date(), noAnswerDelayDays(t.noAnswerStreak + 1) ?? 28))}
-              submitLabel={roletaSlugs ? "Registrar → 🎲 sortear próxima" : "Registrar → próxima da fila"}
-            />
-          </Card>
-
           <ContactsSection companyId={co.id} contacts={co.contacts} />
 
           <CompanySection co={co} />
@@ -359,19 +364,24 @@ export default async function TaskPage({
           </Card>
         </div>
 
-        {/* pitch + checklist da carteira sempre visíveis durante a ligação; key zera os checks a cada empresa */}
+        {/* registrar → regra de ouro → próxima (da fila ou sorteada). Fica fixo:
+            é o que você preenche enquanto rola a ficha atrás de um dado. */}
         <div className="lg:sticky lg:top-6 lg:self-start">
-          <PitchPanel
-            key={t.id}
-            campaignName={t.campaign.name}
-            editHref={t.campaign.slug ? `/campaigns/${t.campaign.slug}/editar` : null}
-            fluxoHref={t.campaign.slug ? `/campaigns/${t.campaign.slug}/fluxo` : null}
-            graph={graph}
-            items={t.campaign.checklistItems}
-            hasScript={Boolean(t.campaign.script)}
-          >
-            {t.campaign.script && <Markdown text={t.campaign.script} />}
-          </PitchPanel>
+          <Card title="Registrar ligação">
+            <CallLogForm
+              key={t.activities.length}
+              action={logCallAndNext.bind(null, t.id, roletaSlugs)}
+              contacts={contacts}
+              stageOptions={stageOptions}
+              objectionOptions={objectionOptions}
+              objectiveOptions={objectiveOptions}
+              mentalOptions={mentalOptions}
+              typeOptions={typeOptions}
+              roleLabels={ROLE_LABELS}
+              defaultNextActionAt={toDatetimeLocal(addDays(new Date(), noAnswerDelayDays(t.noAnswerStreak + 1) ?? 28))}
+              submitLabel={roletaSlugs ? "Registrar → 🎲 sortear próxima" : "Registrar → próxima da fila"}
+            />
+          </Card>
         </div>
       </div>
     </div>

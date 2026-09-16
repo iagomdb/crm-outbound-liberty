@@ -2,46 +2,45 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Markdown } from "@/components/Markdown";
-import { caminhoStore } from "@/lib/caminho-store";
+import { caminhoStore, falaStore } from "@/lib/caminho-store";
 import {
   caminhoParaRegistro,
   destinoDe,
   escolher,
   indexGraph,
-  KIND_CLASSES,
-  KIND_LABELS,
   type FlowGraph,
+  type FlowIndex,
   type Passo,
 } from "@/core/script-flow";
 import { FlowColumns, FlowTrail } from "./FlowColumns";
 
 /**
  * O fluxo DURANTE a ligação (aba 🌳 do PitchPanel). Você clica a conversa
- * conforme ela acontece: abertura → reação dele → objeção → test drive. A fala
- * do passo atual fica embaixo, grande, pra ler em voz alta.
+ * conforme ela acontece: abertura → reação dele → objeção → test drive.
+ *
+ * Aqui ficam só as colunas. A FALA do passo aberto é publicada no falaStore e
+ * desenhada pelo FalaBox, numa caixa larga logo abaixo — texto pra ler em voz
+ * alta não cabe espremido ao lado das colunas.
  *
  * O caminho clicado vai junto no registro da ligação (caminhoStore → hidden
  * input do CallLogForm). Não é telemetria: é o que responde depois qual
- * abertura converte e em que frase a conversa morre, sem você digitar nada.
+ * abertura converte e em que passo a conversa morre, sem você digitar nada.
  */
 export function ScriptFlow({ graph, editHref }: { graph: FlowGraph; editHref: string | null }) {
   const ix = useMemo(() => indexGraph(graph), [graph]);
   const [caminho, setCaminho] = useState<Passo[]>([]);
 
-  // empresa nova (key por target) ⇒ zera o caminho que iria pro registro
+  // empresa nova (key por target) ⇒ zera caminho e fala
   useEffect(() => {
     caminhoStore.reset();
+    falaStore.set(null);
   }, []);
 
   const andar = (next: Passo[]) => {
     setCaminho(next);
     caminhoStore.set(caminhoParaRegistro(ix, next));
+    falaStore.set(falaDoPasso(ix, next[next.length - 1]));
   };
-
-  const ultimo = caminho[caminho.length - 1];
-  const atual = ultimo ? ix.opcoes.get(ultimo.opcaoId) : null;
-  const semSaida = ultimo ? !destinoDe(ix, ultimo) : false;
 
   if (!ix.entrada || !ix.entrada.opcoes.length) {
     return (
@@ -66,33 +65,21 @@ export function ScriptFlow({ graph, editHref }: { graph: FlowGraph; editHref: st
         onPick={(nivel, menuId, opcaoId) => andar(escolher(caminho, nivel, menuId, opcaoId))}
       />
 
-      {atual ? (
-        <div className={`rounded-lg border-l-4 py-2 pl-3 ${KIND_CLASSES[atual.kind].on}`}>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-xs font-semibold">{atual.titulo}</span>
-            <span className="shrink-0 text-[10px] uppercase tracking-wide text-zinc-400">
-              {KIND_LABELS[atual.kind]}
-            </span>
-          </div>
-          {atual.fala ? (
-            <div className="mt-1 text-sm leading-relaxed">
-              <Markdown text={atual.fala} />
-            </div>
-          ) : (
-            <p className="mt-1 text-xs text-zinc-400">Sem fala escrita — esta opção só ramifica.</p>
-          )}
-          {atual.nota && (
-            <p className="mt-2 border-t border-current/10 pt-1.5 text-xs italic text-zinc-500">{atual.nota}</p>
-          )}
-          {semSaida && (
-            <p className="mt-2 text-[11px] text-zinc-400">
-              Fim do galho — registre a ligação ou clique num passo da trilha pra voltar.
-            </p>
-          )}
-        </div>
-      ) : (
-        <p className="text-xs text-zinc-400">Escolha a abertura pela qual você vai entrar.</p>
-      )}
+      {!caminho.length && <p className="text-xs text-zinc-400">Escolha a abertura pela qual você vai entrar.</p>}
     </div>
   );
+}
+
+/** O que o FalaBox precisa saber sobre o passo aberto. */
+function falaDoPasso(ix: FlowIndex, passo: Passo | undefined) {
+  if (!passo) return null;
+  const o = ix.opcoes.get(passo.opcaoId);
+  if (!o) return null;
+  return {
+    titulo: o.titulo,
+    fala: o.fala,
+    nota: o.nota,
+    kind: o.kind,
+    fimDoGalho: !destinoDe(ix, passo),
+  };
 }

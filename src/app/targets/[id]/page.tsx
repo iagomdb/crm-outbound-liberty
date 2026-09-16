@@ -6,6 +6,7 @@ import { StageBadge } from "@/components/StageBadge";
 import { CallLogForm } from "@/components/CallLogForm";
 import { ActivityHistory } from "@/components/ActivityHistory";
 import { PitchPanel } from "@/components/PitchPanel";
+import { FalaBox } from "@/components/flow/FalaBox";
 import { Markdown } from "@/components/Markdown";
 import { Card, Button, ButtonLink } from "@/components/ui";
 import { ScheduleReturnSection } from "./_sections/ScheduleReturnSection";
@@ -97,6 +98,25 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
         </div>
       )}
 
+      {/* O FLUXO em largura inteira: as colunas da conversa só servem se couberem
+          lado a lado. key zera o caminho e os checks a cada empresa. */}
+      <PitchPanel
+        key={t.id}
+        campaignName={t.campaign.name}
+        editHref={t.campaign.slug ? `/campaigns/${t.campaign.slug}/editar` : null}
+        fluxoHref={t.campaign.slug ? `/campaigns/${t.campaign.slug}/fluxo` : null}
+        graph={graph}
+        items={t.campaign.checklistItems}
+        hasScript={Boolean(t.campaign.script)}
+        contentMaxH="max-h-[46vh]"
+      >
+        {t.campaign.script && <Markdown text={t.campaign.script} />}
+      </PitchPanel>
+
+      {/* a fala do passo aberto, em caixa própria: é o texto lido em voz alta,
+          então quer largura e altura só dele. Some enquanto nada foi escolhido. */}
+      <FalaBox />
+
       <div className="grid gap-6 lg:grid-cols-[1fr_400px] 2xl:grid-cols-[1fr_560px]">
         <div className="flex flex-col gap-6">
           <ScheduleReturnSection
@@ -126,20 +146,10 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
           </Card>
         </div>
 
-        {/* coluna direita: pitch/checklist da carteira + log de ligação */}
+        {/* coluna direita: o log de ligação, fixo na rolagem. O fluxo não mora
+            aqui — ele abre em largura total acima, porque as colunas da conversa
+            precisam caber lado a lado. */}
         <div className="flex flex-col gap-6 lg:sticky lg:top-6 lg:self-start">
-          <PitchPanel
-            key={t.id}
-            campaignName={t.campaign.name}
-            editHref={t.campaign.slug ? `/campaigns/${t.campaign.slug}/editar` : null}
-            fluxoHref={t.campaign.slug ? `/campaigns/${t.campaign.slug}/fluxo` : null}
-            graph={graph}
-            items={t.campaign.checklistItems}
-            hasScript={Boolean(t.campaign.script)}
-            contentMaxH="max-h-[40vh]"
-          >
-            {t.campaign.script && <Markdown text={t.campaign.script} />}
-          </PitchPanel>
           <Card title="Registrar ligação">
             <CallLogForm
               key={t.activities.length}
