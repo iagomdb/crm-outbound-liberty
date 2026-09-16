@@ -1,49 +1,51 @@
-import { and, asc, eq, gt, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import type { getDb } from "../db";
-import { scriptEdges, scriptNodes } from "../db/schema";
+import { scriptGroupOptions, scriptGroups, scriptNodes } from "../db/schema";
 
 /**
- * Mutações do grafo do fluxo que são grandes demais pra viver dentro de uma
- * action. Mesma divisão de core/checklist.ts: fica fora das actions pra não
- * virar endpoint público — quem chama garante auth. Recebe o db, então dá pra
- * exercitar fora do Next (scripts/test-fluxo.ts).
+ * Mutações do fluxo grandes demais pra viver dentro de uma action. Mesma divisão
+ * de core/checklist.ts: fica fora das actions pra não virar endpoint público —
+ * quem chama garante auth. Recebe o db, então dá pra exercitar fora do Next
+ * (scripts/test-fluxo.ts).
+ *
+ * O modelo de MENUS matou dois verbos que existiam no modelo antigo:
+ *   · "cair no mesmo galho" virou escolher o mesmo menu de destino (um update)
+ *   · "pendurar passo existente" virou pôr a opção no menu (uma linha de N:N)
+ * Sobrou o que é de fato conteúdo: duplicar uma redação e fundir repetidas.
  */
 
 type DB = ReturnType<typeof getDb>;
 
-/**
- * Duplica um passo como VARIAÇÃO: a cópia nasce no mesmo lugar (mesmos pais) e
- * apontando pros MESMOS próximos passos.
- *
- * É o atalho pro caso "abertura 1, 2 e 3 são redações diferentes que caem no
- * mesmo galho" — sem isto, cada abertura nova exigiria pendurar os oito filhos
- * na mão, um por um.
- *
- * Compartilha os filhos, NÃO clona a subárvore. Clonar fragmentaria a
- * estatística: o objetivo é medir qual redação converte melhor com o resto da
- * conversa igual. Se um galho precisar divergir depois, basta tirar dessa
- * variação o filho que não serve.
- *
- * A cópia entra logo depois do original em cada coluna onde ele aparece —
- * variação jogada no fim da lista não se compara com o olho.
- */
-export async function duplicarPasso(db: DB, nodeId: string): Promise<string | null> {
-  const [orig] = await db.select().from(scriptNodes).where(eq(scriptNodes.id, nodeId));
-  if (!orig) return null;
+/** Próxima posição livre dentro de um menu. */
+async function proximaOrdem(db: DB, groupId: string) {
+  const [r] = await db
+    .select({ max: sql<number>`coalesce(max(${scriptGroupOptions.ordem}), -1)` })
+    .from(scriptGroupOptions)
+    .where(eq(scriptGroupOptions.groupId, groupId));
+  return (r?.max ?? -1) + 1;
+}
 
-  // abre espaço na coluna das aberturas (as outras colunas são ordenadas pela aresta)
-  if (orig.entrada) {
-    await db
-      .update(scriptNodes)
-      .set({ ordem: sql`${scriptNodes.ordem} + 1` })
-      .where(
-        and(
-          eq(scriptNodes.campaignId, orig.campaignId),
-          eq(scriptNodes.entrada, true),
-          gt(scriptNodes.ordem, orig.ordem),
-        ),
-      );
-  }
+/**
+ * Duplica uma opção como VARIAÇÃO: mesma fala, mesmo menu, mesmo destino, logo
+ * abaixo da original. Pra testar outra redação com o resto da conversa igual.
+ *
+ * No modelo de menus isso ficou trivial — a cópia não precisa herdar ligação
+ * nenhuma, porque quem manda no destino é o menu. Antes custava copiar as
+ * arestas de entrada e de saída na mão.
+ */
+export async function duplicarOpcao(db: DB, groupId: string, opcaoId: string): Promise<string | null> {
+  const [orig] = await db.select().from(scriptNodes).where(eq(scriptNodes.id, opcaoId));
+  const [vinculo] = await db
+    .select({ ordem: scriptGroupOptions.ordem })
+    .from(scriptGroupOptions)
+    .where(and(eq(scriptGroupOptions.groupId, groupId), eq(scriptGroupOptions.nodeId, opcaoId)));
+  if (!orig || !vinculo) return null;
+
+  // abre espaço pra cópia entrar logo abaixo da original
+  await db
+    .update(scriptGroupOptions)
+    .set({ ordem: sql`${scriptGroupOptions.ordem} + 1` })
+    .where(and(eq(scriptGroupOptions.groupId, groupId), sql`${scriptGroupOptions.ordem} > ${vinculo.ordem}`));
 
   const [copia] = await db
     .insert(scriptNodes)
@@ -53,33 +55,127 @@ export async function duplicarPasso(db: DB, nodeId: string): Promise<string | nu
       titulo: `${orig.titulo} (variação)`,
       fala: orig.fala,
       nota: orig.nota,
-      entrada: orig.entrada,
-      ordem: orig.entrada ? orig.ordem + 1 : 0,
+      proximoId: orig.proximoId,
     })
     .returning({ id: scriptNodes.id });
 
-  // mesmos próximos passos: é isto que faz a variação cair no mesmo galho
-  const saidas = await db
-    .select({ toId: scriptEdges.toId, ordem: scriptEdges.ordem })
-    .from(scriptEdges)
-    .where(eq(scriptEdges.fromId, nodeId))
-    .orderBy(asc(scriptEdges.ordem));
-  if (saidas.length) {
-    await db.insert(scriptEdges).values(saidas.map((e) => ({ fromId: copia.id, toId: e.toId, ordem: e.ordem })));
+  await db
+    .insert(scriptGroupOptions)
+    .values({ groupId, nodeId: copia.id, ordem: vinculo.ordem + 1 });
+
+  return copia.id;
+}
+
+/**
+ * Funde duas opções que dizem a MESMA coisa: `manter` absorve `absorvido`, que
+ * deixa de existir.
+ *
+ * O conserto pra quando a mesma fala virou duas opções em menus diferentes — aí
+ * melhorar o texto exige editar nos dois e a estatística sai partida. Depois da
+ * fusão é uma opção só, presente nos dois menus.
+ *
+ * Fica o conteúdo de `manter` (o texto do absorvido se perde, por isso quem
+ * chama avisa antes) e ela herda as PRESENÇAS do outro: todo menu que tinha o
+ * absorvido passa a ter este. O histórico é remapeado junto, senão o Aprendizado
+ * mostraria duas linhas pro mesmo movimento — uma de uma opção que não existe.
+ */
+export async function fundirOpcoes(db: DB, manterId: string, absorvidoId: string): Promise<boolean> {
+  if (!manterId || !absorvidoId || manterId === absorvidoId) return false;
+
+  const [manter] = await db.select().from(scriptNodes).where(eq(scriptNodes.id, manterId));
+  const [absorvido] = await db.select().from(scriptNodes).where(eq(scriptNodes.id, absorvidoId));
+  if (!manter || !absorvido || manter.campaignId !== absorvido.campaignId) return false;
+
+  const presencas = await db
+    .select({ groupId: scriptGroupOptions.groupId, ordem: scriptGroupOptions.ordem })
+    .from(scriptGroupOptions)
+    .where(eq(scriptGroupOptions.nodeId, absorvidoId))
+    .orderBy(asc(scriptGroupOptions.ordem));
+
+  for (const p of presencas) {
+    const [ja] = await db
+      .select({ id: scriptGroupOptions.id })
+      .from(scriptGroupOptions)
+      .where(and(eq(scriptGroupOptions.groupId, p.groupId), eq(scriptGroupOptions.nodeId, manterId)));
+    if (ja) continue; // esse menu já tinha as duas
+    await db.insert(scriptGroupOptions).values({ groupId: p.groupId, nodeId: manterId, ordem: p.ordem });
   }
 
-  // mesmos pais: a cópia vira irmã do original, logo abaixo dele em cada coluna
-  const entradas = await db
-    .select({ fromId: scriptEdges.fromId, ordem: scriptEdges.ordem })
-    .from(scriptEdges)
-    .where(eq(scriptEdges.toId, nodeId));
-  for (const e of entradas) {
+  // sem destino próprio, a que fica assume o do absorvido (melhor que perder)
+  if (!manter.proximoId && absorvido.proximoId) {
     await db
-      .update(scriptEdges)
-      .set({ ordem: sql`${scriptEdges.ordem} + 1` })
-      .where(and(eq(scriptEdges.fromId, e.fromId), gt(scriptEdges.ordem, e.ordem)));
-    await db.insert(scriptEdges).values({ fromId: e.fromId, toId: copia.id, ordem: e.ordem + 1 });
+      .update(scriptNodes)
+      .set({ proximoId: absorvido.proximoId, updatedAt: new Date() })
+      .where(eq(scriptNodes.id, manterId));
+  }
+
+  await db.execute(sql`
+    update activities
+    set caminho = (
+      select jsonb_agg(
+        case when passo->>'nodeId' = ${absorvidoId}
+          then jsonb_build_object('nodeId', ${manterId}::text, 'titulo', ${manter.titulo}::text, 'kind', ${manter.kind}::text)
+          else passo
+        end
+        order by pos
+      )
+      from jsonb_array_elements(activities.caminho) with ordinality as t(passo, pos)
+    )
+    where activities.caminho @> ${JSON.stringify([{ nodeId: absorvidoId }])}::jsonb
+  `);
+
+  // as presenças do absorvido vão junto por cascade
+  await db.delete(scriptNodes).where(eq(scriptNodes.id, absorvidoId));
+  return true;
+}
+
+/**
+ * Duplica um MENU: as MESMAS opções (não cópias delas — opção é compartilhada de
+ * propósito, é o que mantém a estatística inteira) e **nenhum destino**.
+ *
+ * Nasce sem padrão de propósito. Duplicar menu nunca foi sobre repetir texto —
+ * pra isso a opção já vive em vários menus de uma vez. O único motivo pra
+ * duplicar é mandar o mesmo conjunto de escolhas pra OUTRO lugar, então herdar o
+ * destino do original seria justamente o contrário do que se pediu.
+ *
+ * Ressalva: opção com destino PRÓPRIO leva esse destino junto, porque ele mora
+ * na opção e ela é a mesma nos dois menus. Só o padrão é por menu.
+ */
+export async function duplicarMenu(db: DB, menuId: string): Promise<string | null> {
+  const [orig] = await db.select().from(scriptGroups).where(eq(scriptGroups.id, menuId));
+  if (!orig) return null;
+
+  const [copia] = await db
+    .insert(scriptGroups)
+    .values({
+      campaignId: orig.campaignId,
+      nome: `${orig.nome} 2`,
+      entrada: false, // só um menu de entrada por carteira
+      padraoId: null, // o destino é o que você vai mudar — nasce em branco
+      posX: orig.posX + 40,
+      posY: orig.posY + 40,
+    })
+    .returning({ id: scriptGroups.id });
+
+  const opcoes = await db
+    .select({ nodeId: scriptGroupOptions.nodeId, ordem: scriptGroupOptions.ordem })
+    .from(scriptGroupOptions)
+    .where(eq(scriptGroupOptions.groupId, menuId))
+    .orderBy(asc(scriptGroupOptions.ordem));
+  if (opcoes.length) {
+    await db.insert(scriptGroupOptions).values(opcoes.map((o) => ({ groupId: copia.id, nodeId: o.nodeId, ordem: o.ordem })));
   }
 
   return copia.id;
 }
+
+/** Garante que só um menu da carteira é a entrada. */
+export async function definirEntrada(db: DB, campaignId: string, menuId: string) {
+  await db
+    .update(scriptGroups)
+    .set({ entrada: false, updatedAt: new Date() })
+    .where(and(eq(scriptGroups.campaignId, campaignId), eq(scriptGroups.entrada, true)));
+  await db.update(scriptGroups).set({ entrada: true, updatedAt: new Date() }).where(eq(scriptGroups.id, menuId));
+}
+
+export { proximaOrdem as proximaOrdemNoMenu };

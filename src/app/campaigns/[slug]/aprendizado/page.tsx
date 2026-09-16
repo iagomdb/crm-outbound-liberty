@@ -55,7 +55,8 @@ export default async function AprendizadoPage({ params }: { params: Promise<{ sl
 
   // o que o fluxo ensinou: por onde a conversa passou e onde ela morreu.
   // Vem do caminho clicado na ligação — nada disso é digitado à mão.
-  const entradaIds = new Set(graph.nodes.filter((n) => n.entrada).map((n) => n.id));
+  // as opções do menu de entrada são as aberturas — é entre elas que o A/B roda
+  const entradaIds = new Set((graph.menus.find((m) => m.entrada)?.opcoes ?? []).map((o) => o.id));
   const aberturas = statsDeAbertura(caminhos, entradaIds);
   const passos = statsPorNo(caminhos);
   const mortes = [...passos].filter((p) => p.morreu > 0).sort((a, b) => b.morreu - a.morreu);

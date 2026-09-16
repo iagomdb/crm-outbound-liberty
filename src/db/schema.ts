@@ -4,8 +4,10 @@
  *
  *   campaigns  → o "projeto"/oferta (multi-campanha). #1 = Recuperação de Crédito
  *                agrupadas por `conta` = pra quem a prospecção é feita
- *   script_nodes/edges → o FLUXO da carteira: grafo do script ramificado
- *                (abertura → reação → objeção → test drive → saída)
+ *   script_groups → o FLUXO da carteira: MENUS do script ramificado. Um menu é
+ *                uma coluna de opções ("Abertura", "Reação", "Objeções"), e a
+ *                ligação vai de OPÇÃO → MENU inteiro
+ *   script_nodes → as opções dentro dos menus (a fala, e pra onde ela leva)
  *   companies  → global, chave = CNPJ (dados do export consultas.plus)
  *   contacts   → pessoa na empresa (papel: atendente/analista/decisor; email nominal vs genérico)
  *   targets    → empresa ↔ campanha = o registro de pipeline (estágio, cadência, pretexto novo)
@@ -15,6 +17,7 @@
  *   sessions   → sessões de login (cookie guarda o token; o banco só o hash dele)
  */
 import { relations, sql } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   boolean,
   date,
@@ -170,18 +173,52 @@ export const checklistOptions = pgTable(
   (t) => [index("checklist_options_item_idx").on(t.itemId)],
 );
 
-// ---------------------------------------------------------------- script_nodes / script_edges
-// O FLUXO da carteira: script ramificado (não linear). Um nó é UM movimento da
-// conversa — uma abertura, uma reação dele, uma objeção, um test drive, uma saída.
-// As arestas dizem o que pode vir depois de quê.
+// ---------------------------------------------------------------- script_groups / script_nodes
+// O FLUXO da carteira: script ramificado (não linear), modelado em MENUS.
 //
-// É GRAFO, não árvore: o mesmo nó pode ser filho de vários pais. "Manda no zap"
-// vem depois da abertura E depois da CTA e é o MESMO nó — edita num lugar, muda
-// em todos, e a estatística dele não fragmenta em cópias.
+// Um MENU (`script_groups`) é um momento da conversa com várias saídas possíveis
+// — "Abertura", "Reação dele", "Objeções". Uma OPÇÃO (`script_nodes`) é uma fala
+// dentro de um menu. A ligação sai da OPÇÃO e chega num MENU INTEIRO.
 //
-// Na discagem vira colunas (estilo Finder): clica na abertura, abre a coluna das
-// reações; clica na reação, abre a seguinte. O caminho percorrido vai pro
+// Por que opção→menu e não opção→opção: com 3 variações por passo, ligar dois
+// passos custava 3×3 = 9 arestas, e cada variação nova custava mais 6. Apontando
+// pro menu, ligar custa 1 e a variação nova custa ZERO — ela já nasce dentro do
+// menu que todo mundo enxerga. É o que torna 9 passos × 5 lines manutenível.
+//
+// O destino tem dois níveis, como o "Default" do Typebot: a opção pode ter o seu
+// (`script_nodes.proximoId`) e, quando não tem, cai no padrão do menu
+// (`script_groups.padraoId`). Então "o menu B leva ao menu C" é UMA configuração,
+// e só a exceção é declarada por opção.
+//
+// Uma opção pode estar em VÁRIOS menus (`script_group_options`): "manda no zap"
+// aparece no menu da abertura e no da CTA sendo a MESMA opção — edita num lugar,
+// e a estatística dela não fragmenta. E como o padrão vem do menu, a mesma opção
+// pode levar a lugares diferentes dependendo de onde foi usada.
+//
+// Na discagem vira colunas: cada coluna é um menu. O caminho percorrido vai pro
 // registro da ligação (`activities.caminho`) e alimenta o Aprendizado.
+export const scriptGroups = pgTable(
+  "script_groups",
+  {
+    id: uuid().defaultRandom().primaryKey(),
+    campaignId: uuid()
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    nome: text().notNull(), // "Abertura", "Objeções" — o título do card
+    /** true = por onde a ligação começa (a primeira coluna) */
+    entrada: boolean().notNull().default(false),
+    /** destino padrão: opção sem destino próprio cai aqui (o "Default" do Typebot) */
+    padraoId: uuid().references((): AnyPgColumn => scriptGroups.id, { onDelete: "set null" }),
+    // posição no canvas do editor — layout é dado do usuário, não pode se perder
+    posX: integer().notNull().default(0),
+    posY: integer().notNull().default(0),
+    ...timestamps,
+  },
+  (t) => [
+    index("script_groups_campaign_idx").on(t.campaignId),
+    index("script_groups_entrada_idx").on(t.campaignId, t.entrada),
+  ],
+);
 export const scriptNodes = pgTable(
   "script_nodes",
   {
@@ -192,20 +229,45 @@ export const scriptNodes = pgTable(
     kind: scriptNodeKind().notNull().default("fala"),
     titulo: text().notNull(), // rótulo curto do card ("A3 · manda no zap")
     fala: text(), // o texto exato, lido em voz alta (markdown)
-    nota: text(), // dica de tom / quando usar — só aparece no nó aberto
-    /** true = ponto de partida da ligação (as aberturas). São a 1ª coluna. */
+    nota: text(), // dica de tom / quando usar — só aparece na opção aberta
+    /** pra onde ESTA opção leva. null = cai no padrão do menu em que foi clicada. */
+    proximoId: uuid().references(() => scriptGroups.id, { onDelete: "set null" }),
+    /** LEGADO (modelo opção→opção). Lido só por scripts/migrate-fluxo-menus.ts. */
     entrada: boolean().notNull().default(false),
+    /** LEGADO: a ordem agora é por menu, em script_group_options.ordem. */
     ordem: integer().notNull().default(0),
     ...timestamps,
   },
+  (t) => [index("script_nodes_campaign_idx").on(t.campaignId)],
+);
+
+// Quais opções aparecem em cada menu, e em que ordem. É N:N de propósito — a
+// mesma opção em dois menus é a MESMA opção (mesma estatística, edita uma vez).
+export const scriptGroupOptions = pgTable(
+  "script_group_options",
+  {
+    id: uuid().defaultRandom().primaryKey(),
+    groupId: uuid()
+      .notNull()
+      .references(() => scriptGroups.id, { onDelete: "cascade" }),
+    nodeId: uuid()
+      .notNull()
+      .references(() => scriptNodes.id, { onDelete: "cascade" }),
+    ordem: integer().notNull().default(0),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
   (t) => [
-    index("script_nodes_campaign_idx").on(t.campaignId),
-    index("script_nodes_entrada_idx").on(t.campaignId, t.entrada),
+    uniqueIndex("script_group_options_uidx").on(t.groupId, t.nodeId),
+    index("script_group_options_group_idx").on(t.groupId),
+    index("script_group_options_node_idx").on(t.nodeId),
   ],
 );
 
-// Aresta dirigida: depois de `from` pode vir `to`. Ciclo é permitido e
-// inofensivo — a navegação é iterativa sobre o caminho, não recursiva no grafo.
+/**
+ * LEGADO — o modelo antigo, opção→opção. Continua aqui de propósito: a migração
+ * pra menus é ADITIVA, e quem converte é scripts/migrate-fluxo-menus.ts, lendo
+ * daqui. Só some numa migration posterior, depois do deploy conferido.
+ */
 export const scriptEdges = pgTable(
   "script_edges",
   {
@@ -416,6 +478,7 @@ export const campaignsRelations = relations(campaigns, ({ many }) => ({
   targets: many(targets),
   checklistItems: many(checklistItems),
   scriptNodes: many(scriptNodes),
+  scriptGroups: many(scriptGroups),
 }));
 
 export const checklistItemsRelations = relations(checklistItems, ({ one, many }) => ({
@@ -427,15 +490,21 @@ export const checklistOptionsRelations = relations(checklistOptions, ({ one }) =
   item: one(checklistItems, { fields: [checklistOptions.itemId], references: [checklistItems.id] }),
 }));
 
-export const scriptNodesRelations = relations(scriptNodes, ({ one, many }) => ({
-  campaign: one(campaigns, { fields: [scriptNodes.campaignId], references: [campaigns.id] }),
-  saidas: many(scriptEdges, { relationName: "saidas" }),
-  entradas: many(scriptEdges, { relationName: "entradas" }),
+export const scriptGroupsRelations = relations(scriptGroups, ({ one, many }) => ({
+  campaign: one(campaigns, { fields: [scriptGroups.campaignId], references: [campaigns.id] }),
+  padrao: one(scriptGroups, { fields: [scriptGroups.padraoId], references: [scriptGroups.id], relationName: "padrao" }),
+  opcoes: many(scriptGroupOptions),
 }));
 
-export const scriptEdgesRelations = relations(scriptEdges, ({ one }) => ({
-  from: one(scriptNodes, { fields: [scriptEdges.fromId], references: [scriptNodes.id], relationName: "saidas" }),
-  to: one(scriptNodes, { fields: [scriptEdges.toId], references: [scriptNodes.id], relationName: "entradas" }),
+export const scriptNodesRelations = relations(scriptNodes, ({ one, many }) => ({
+  campaign: one(campaigns, { fields: [scriptNodes.campaignId], references: [campaigns.id] }),
+  proximo: one(scriptGroups, { fields: [scriptNodes.proximoId], references: [scriptGroups.id] }),
+  menus: many(scriptGroupOptions),
+}));
+
+export const scriptGroupOptionsRelations = relations(scriptGroupOptions, ({ one }) => ({
+  group: one(scriptGroups, { fields: [scriptGroupOptions.groupId], references: [scriptGroups.id] }),
+  node: one(scriptNodes, { fields: [scriptGroupOptions.nodeId], references: [scriptNodes.id] }),
 }));
 
 export const companiesRelations = relations(companies, ({ many }) => ({

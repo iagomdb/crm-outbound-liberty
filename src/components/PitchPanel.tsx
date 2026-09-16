@@ -53,7 +53,7 @@ export function PitchPanel({
   /** o pitch já renderizado (Markdown é server component) */
   children: ReactNode;
 }) {
-  const temFluxo = graph.nodes.some((n) => n.entrada);
+  const temFluxo = graph.menus.some((m) => m.entrada && m.opcoes.length > 0);
   // fluxo montado ⇒ é por ele que a ligação começa; sem fluxo, nada muda
   const [tab, setTab] = useState<"fluxo" | "pitch" | "checklist">(temFluxo ? "fluxo" : "pitch");
   const [checked, setChecked] = useState<Set<string>>(new Set());

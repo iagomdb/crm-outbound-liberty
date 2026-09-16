@@ -8,7 +8,8 @@ import {
   contacts,
   emailTemplates,
   meetings,
-  scriptEdges,
+  scriptGroupOptions,
+  scriptGroups,
   scriptNodes,
   targets,
 } from "./schema";
@@ -16,7 +17,7 @@ import type { IcpRawCall, IcpRawMeeting, IcpRawTarget } from "@/core/icp-stats";
 import { type Stage, TERMINAL_STAGES } from "@/core/pipeline";
 import { CYCLE_END_STAGES } from "@/core/tasks";
 import type { FunnelCounts } from "@/core/funnel";
-import type { CaminhoRow, FlowGraph } from "@/core/script-flow";
+import type { CaminhoRow, FlowGraph, FlowMenu, FlowOption } from "@/core/script-flow";
 
 export type CampaignStats = {
   id: string;
@@ -177,36 +178,66 @@ export async function getChecklistItems(campaignId: string) {
 // ---------------------------------------------------------------- fluxo (grafo do script)
 
 /**
- * O grafo do fluxo de uma carteira, inteiro e plano — nós + arestas. Vai direto
- * pro client (é pequeno: dezenas de nós) e a forma é montada lá com
- * `indexGraph`. Buscar por níveis daria N+1 e não teria ganho nenhum.
+ * O fluxo de uma carteira: os MENUS com suas opções, já montados. Vai inteiro
+ * pro client (é pequeno: dezenas de opções) e a forma é derivada lá com
+ * `indexGraph`. Duas queries e um agrupamento em memória — buscar por nível
+ * daria N+1 sem ganho nenhum.
  */
 export async function getScriptGraph(campaignId: string): Promise<FlowGraph> {
   const db = getDb();
-  const nodes = await db
+  const menus = await db
+    .select({
+      id: scriptGroups.id,
+      nome: scriptGroups.nome,
+      entrada: scriptGroups.entrada,
+      padraoId: scriptGroups.padraoId,
+      posX: scriptGroups.posX,
+      posY: scriptGroups.posY,
+    })
+    .from(scriptGroups)
+    .where(eq(scriptGroups.campaignId, campaignId))
+    .orderBy(asc(scriptGroups.createdAt));
+
+  if (!menus.length) return { menus: [] };
+
+  const linhas = await db
+    .select({
+      groupId: scriptGroupOptions.groupId,
+      id: scriptNodes.id,
+      kind: scriptNodes.kind,
+      titulo: scriptNodes.titulo,
+      fala: scriptNodes.fala,
+      nota: scriptNodes.nota,
+      proximoId: scriptNodes.proximoId,
+    })
+    .from(scriptGroupOptions)
+    .innerJoin(scriptNodes, eq(scriptGroupOptions.nodeId, scriptNodes.id))
+    .innerJoin(scriptGroups, eq(scriptGroupOptions.groupId, scriptGroups.id))
+    .where(eq(scriptGroups.campaignId, campaignId))
+    .orderBy(asc(scriptGroupOptions.ordem), asc(scriptNodes.createdAt));
+
+  const porMenu = new Map<string, FlowOption[]>();
+  for (const { groupId, ...opcao } of linhas) {
+    porMenu.set(groupId, [...(porMenu.get(groupId) ?? []), opcao]);
+  }
+
+  return { menus: menus.map((m): FlowMenu => ({ ...m, opcoes: porMenu.get(m.id) ?? [] })) };
+}
+
+/** Todas as opções da carteira, inclusive as que não estão em menu nenhum. */
+export async function getScriptOptions(campaignId: string): Promise<FlowOption[]> {
+  return getDb()
     .select({
       id: scriptNodes.id,
       kind: scriptNodes.kind,
       titulo: scriptNodes.titulo,
       fala: scriptNodes.fala,
       nota: scriptNodes.nota,
-      entrada: scriptNodes.entrada,
-      ordem: scriptNodes.ordem,
+      proximoId: scriptNodes.proximoId,
     })
     .from(scriptNodes)
     .where(eq(scriptNodes.campaignId, campaignId))
-    .orderBy(asc(scriptNodes.ordem), asc(scriptNodes.createdAt));
-
-  if (!nodes.length) return { nodes: [], edges: [] };
-
-  const edges = await db
-    .select({ fromId: scriptEdges.fromId, toId: scriptEdges.toId, ordem: scriptEdges.ordem })
-    .from(scriptEdges)
-    .innerJoin(scriptNodes, eq(scriptEdges.fromId, scriptNodes.id))
-    .where(eq(scriptNodes.campaignId, campaignId))
-    .orderBy(asc(scriptEdges.ordem));
-
-  return { nodes, edges };
+    .orderBy(asc(scriptNodes.createdAt));
 }
 
 /**

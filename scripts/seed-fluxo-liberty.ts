@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { eq } from "drizzle-orm";
 import { getDb } from "../src/db";
-import { campaigns, scriptEdges, scriptNodes } from "../src/db/schema";
+import { campaigns, scriptGroupOptions, scriptGroups, scriptNodes } from "../src/db/schema";
 import type { NodeKind } from "../src/core/script-flow";
 
 /**
@@ -534,6 +534,15 @@ const FLUXO: Record<string, Passo> = {
   s_nao: { titulo: "❌ Não rolou", kind: "saida", nota: "Anote a objeção LITERAL, com as palavras dele. Em 50 ligações você tem sua própria distribuição." },
 };
 
+const LARGURA = 360;
+const ALTURA = 240;
+
+function nomeDoMenu(titulos: string[]): string {
+  const primeiro = (titulos[0] ?? "Menu").replace(/\s+/g, " ").trim();
+  const curto = primeiro.length > 30 ? `${primeiro.slice(0, 29)}…` : primeiro;
+  return titulos.length > 1 ? `${curto} +${titulos.length - 1}` : curto;
+}
+
 async function main() {
   const [slug, ...flags] = process.argv.slice(2);
   const force = flags.includes("--force");
@@ -549,14 +558,15 @@ async function main() {
     process.exit(1);
   }
 
-  const jaTem = await db.select({ id: scriptNodes.id }).from(scriptNodes).where(eq(scriptNodes.campaignId, campaign.id));
+  const jaTem = await db.select({ id: scriptGroups.id }).from(scriptGroups).where(eq(scriptGroups.campaignId, campaign.id));
   if (jaTem.length && !force) {
-    console.error(`"${campaign.name}" já tem ${jaTem.length} passos no fluxo. Use --force pra apagar e recriar.`);
+    console.error(`"${campaign.name}" já tem ${jaTem.length} menus no fluxo. Use --force pra apagar e recriar.`);
     process.exit(1);
   }
   if (jaTem.length) {
+    await db.delete(scriptGroups).where(eq(scriptGroups.campaignId, campaign.id));
     await db.delete(scriptNodes).where(eq(scriptNodes.campaignId, campaign.id));
-    console.log(`fluxo anterior apagado (${jaTem.length} passos)`);
+    console.log(`fluxo anterior apagado (${jaTem.length} menus)`);
   }
 
   // valida antes de tocar no banco: filho citado que não existe é erro de digitação
@@ -566,8 +576,8 @@ async function main() {
     }
   }
 
+  // 1) cada passo do playbook vira uma OPÇÃO
   const ids = new Map<string, string>();
-  let ordemEntrada = 0;
   for (const [chave, passo] of Object.entries(FLUXO)) {
     const [row] = await db
       .insert(scriptNodes)
@@ -577,27 +587,120 @@ async function main() {
         titulo: passo.titulo,
         fala: passo.fala ?? null,
         nota: passo.nota ?? null,
-        entrada: passo.entrada ?? false,
-        ordem: passo.entrada ? ordemEntrada++ : 0,
       })
       .returning({ id: scriptNodes.id });
     ids.set(chave, row.id);
   }
 
-  const arestas = Object.entries(FLUXO).flatMap(([chave, passo]) =>
-    (passo.filhos ?? []).map((filho, ordem) => ({ fromId: ids.get(chave)!, toId: ids.get(filho)!, ordem })),
-  );
-  if (arestas.length) await db.insert(scriptEdges).values(arestas);
+  // 2) conjunto de filhos idêntico ⇒ MESMO menu. É o que faz 6 aberturas
+  //    dividirem um menu de reações em vez de 48 ligações soltas.
+  const menuPorChave = new Map<string, string>();
+  const criarMenu = async (chaves: string[], entrada: boolean, nomeFixo?: string) => {
+    const k = (entrada ? "ENTRADA:" : "") + chaves.join(",");
+    const existente = menuPorChave.get(k);
+    if (existente) return existente;
+    const [menu] = await db
+      .insert(scriptGroups)
+      .values({
+        campaignId: campaign.id,
+        nome: nomeFixo ?? nomeDoMenu(chaves.map((c) => FLUXO[c].titulo)),
+        entrada,
+      })
+      .returning({ id: scriptGroups.id });
+    await db
+      .insert(scriptGroupOptions)
+      .values(chaves.map((c, ordem) => ({ groupId: menu.id, nodeId: ids.get(c)!, ordem })));
+    menuPorChave.set(k, menu.id);
+    return menu.id;
+  };
 
-  const entradas = Object.values(FLUXO).filter((p) => p.entrada).length;
+  const aberturas = Object.entries(FLUXO).filter(([, p]) => p.entrada).map(([c]) => c);
+  const entradaId = await criarMenu(aberturas, true, "Abertura");
+
+  // 3) o destino de cada opção é o menu do conjunto de filhos DELA
+  const menuDosFilhos = new Map<string, string>();
+  for (const [chave, passo] of Object.entries(FLUXO)) {
+    if (!passo.filhos?.length) continue;
+    menuDosFilhos.set(chave, await criarMenu(passo.filhos, false));
+  }
+
+  // 4) onde todas as opções do menu levam pro mesmo lugar, isso é PADRÃO do
+  //    menu — e aí a próxima variação que você escrever não custa ligação
+  let padroes = 0;
+  const padraoDoMenu = new Map<string, string>();
+  for (const [k, menuId] of menuPorChave) {
+    const chaves = k.replace(/^ENTRADA:/, "").split(",").filter(Boolean);
+    const alvos = chaves.map((c) => menuDosFilhos.get(c) ?? null);
+    if (chaves.length < 2 || !alvos[0] || !alvos.every((a) => a === alvos[0])) continue;
+    await db.update(scriptGroups).set({ padraoId: alvos[0] }).where(eq(scriptGroups.id, menuId));
+    padraoDoMenu.set(menuId, alvos[0]);
+    padroes++;
+  }
+
+  // 5) destino por opção só onde ela FOGE do padrão de todos os menus em que está
+  const menusDaChave = new Map<string, string[]>();
+  for (const [k, menuId] of menuPorChave) {
+    for (const c of k.replace(/^ENTRADA:/, "").split(",").filter(Boolean)) {
+      menusDaChave.set(c, [...(menusDaChave.get(c) ?? []), menuId]);
+    }
+  }
+  let excecoes = 0;
+  for (const [chave, alvo] of menuDosFilhos) {
+    const onde = menusDaChave.get(chave) ?? [];
+    if (onde.length > 0 && onde.every((m) => padraoDoMenu.get(m) === alvo)) continue;
+    await db.update(scriptNodes).set({ proximoId: alvo }).where(eq(scriptNodes.id, ids.get(chave)!));
+    excecoes++;
+  }
+
+  await posicionar(db, campaign.id, entradaId);
+
   console.log(
-    `✓ fluxo semeado em "${campaign.name}": ${ids.size} passos, ${arestas.length} ligações, ${entradas} aberturas`,
+    `✓ fluxo semeado em "${campaign.name}": ${ids.size} opções · ${menuPorChave.size} menus · ` +
+      `${padroes} com destino padrão · ${excecoes} destinos de exceção`,
   );
   console.log(`  edite em /campaigns/${slug}/fluxo`);
-  process.exit(0);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+/** Layout inicial do canvas: colunas por distância do menu de entrada. */
+async function posicionar(db: ReturnType<typeof getDb>, campaignId: string, entradaId: string) {
+  const menus = await db.select().from(scriptGroups).where(eq(scriptGroups.campaignId, campaignId));
+  const vinculos = await db.select().from(scriptGroupOptions);
+  const nos = await db.select().from(scriptNodes).where(eq(scriptNodes.campaignId, campaignId));
+  const proximoDa = new Map(nos.map((n) => [n.id, n.proximoId]));
+  const doMenu = new Map<string, string[]>();
+  for (const v of vinculos) doMenu.set(v.groupId, [...(doMenu.get(v.groupId) ?? []), v.nodeId]);
+
+  const saidas = (menuId: string) => {
+    const m = menus.find((x) => x.id === menuId);
+    const alvos = (doMenu.get(menuId) ?? []).map((n) => proximoDa.get(n) ?? m?.padraoId ?? null);
+    return [...new Set(alvos.filter((a): a is string => Boolean(a)))];
+  };
+
+  const nivel = new Map<string, number>([[entradaId, 0]]);
+  const fila = [entradaId];
+  while (fila.length) {
+    const atual = fila.shift()!;
+    for (const alvo of saidas(atual)) {
+      if (nivel.has(alvo)) continue;
+      nivel.set(alvo, (nivel.get(atual) ?? 0) + 1);
+      fila.push(alvo);
+    }
+  }
+  const maior = Math.max(0, ...nivel.values());
+  for (const m of menus) if (!nivel.has(m.id)) nivel.set(m.id, maior + 1);
+
+  const usados = new Map<number, number>();
+  for (const m of menus) {
+    const n = nivel.get(m.id) ?? 0;
+    const linha = usados.get(n) ?? 0;
+    usados.set(n, linha + 1);
+    await db.update(scriptGroups).set({ posX: n * LARGURA, posY: linha * ALTURA }).where(eq(scriptGroups.id, m.id));
+  }
+}
+
+main()
+  .then(() => process.exit(0))
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });

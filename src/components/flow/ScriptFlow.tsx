@@ -6,11 +6,13 @@ import { Markdown } from "@/components/Markdown";
 import { caminhoStore } from "@/lib/caminho-store";
 import {
   caminhoParaRegistro,
+  destinoDe,
   escolher,
   indexGraph,
   KIND_CLASSES,
   KIND_LABELS,
   type FlowGraph,
+  type Passo,
 } from "@/core/script-flow";
 import { FlowColumns, FlowTrail } from "./FlowColumns";
 
@@ -25,22 +27,23 @@ import { FlowColumns, FlowTrail } from "./FlowColumns";
  */
 export function ScriptFlow({ graph, editHref }: { graph: FlowGraph; editHref: string | null }) {
   const ix = useMemo(() => indexGraph(graph), [graph]);
-  const [caminho, setCaminho] = useState<string[]>([]);
+  const [caminho, setCaminho] = useState<Passo[]>([]);
 
   // empresa nova (key por target) ⇒ zera o caminho que iria pro registro
   useEffect(() => {
     caminhoStore.reset();
   }, []);
 
-  const andar = (next: string[]) => {
+  const andar = (next: Passo[]) => {
     setCaminho(next);
     caminhoStore.set(caminhoParaRegistro(ix, next));
   };
 
-  const atual = caminho.length ? ix.byId.get(caminho[caminho.length - 1]) : null;
-  const semSaida = atual && !(ix.filhos.get(atual.id)?.length ?? 0);
+  const ultimo = caminho[caminho.length - 1];
+  const atual = ultimo ? ix.opcoes.get(ultimo.opcaoId) : null;
+  const semSaida = ultimo ? !destinoDe(ix, ultimo) : false;
 
-  if (!ix.entradas.length) {
+  if (!ix.entrada || !ix.entrada.opcoes.length) {
     return (
       <p className="text-sm text-zinc-400">
         Esta carteira ainda não tem fluxo.{" "}
@@ -57,7 +60,11 @@ export function ScriptFlow({ graph, editHref }: { graph: FlowGraph; editHref: st
     <div className="flex flex-col gap-3">
       <FlowTrail ix={ix} caminho={caminho} onJump={(n) => andar(caminho.slice(0, n + 1))} onReset={() => andar([])} />
 
-      <FlowColumns ix={ix} caminho={caminho} onPick={(nivel, id) => andar(escolher(caminho, nivel, id))} />
+      <FlowColumns
+        ix={ix}
+        caminho={caminho}
+        onPick={(nivel, menuId, opcaoId) => andar(escolher(caminho, nivel, menuId, opcaoId))}
+      />
 
       {atual ? (
         <div className={`rounded-lg border-l-4 py-2 pl-3 ${KIND_CLASSES[atual.kind].on}`}>
@@ -72,7 +79,7 @@ export function ScriptFlow({ graph, editHref }: { graph: FlowGraph; editHref: st
               <Markdown text={atual.fala} />
             </div>
           ) : (
-            <p className="mt-1 text-xs text-zinc-400">Sem fala escrita — este nó só ramifica.</p>
+            <p className="mt-1 text-xs text-zinc-400">Sem fala escrita — esta opção só ramifica.</p>
           )}
           {atual.nota && (
             <p className="mt-2 border-t border-current/10 pt-1.5 text-xs italic text-zinc-500">{atual.nota}</p>

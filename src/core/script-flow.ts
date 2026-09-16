@@ -1,39 +1,58 @@
 import type { scriptNodeKind } from "../db/schema";
 
 /**
- * O FLUXO: grafo do script ramificado da carteira (tabelas `script_nodes` /
- * `script_edges`). Aqui mora só a forma — montar o grafo, andar por ele e ler o
- * caminho percorrido. Nada de banco e nada de React: server e client importam
- * o mesmo módulo.
+ * O FLUXO: script ramificado da carteira, modelado em MENUS.
  *
- * Por que grafo e não árvore: uma objeção não pertence a um ponto do script.
- * "Manda no zap" vem depois da abertura E depois da CTA, e tem que ser o MESMO
- * nó — senão você edita a resposta em seis lugares e a estatística dela sai
- * partida em seis pedaços.
+ * Um MENU é um momento da conversa com várias saídas ("Abertura", "Reação",
+ * "Objeções"). Uma OPÇÃO é uma fala dentro do menu. A ligação sai da OPÇÃO e
+ * chega num MENU INTEIRO — não em outra opção.
+ *
+ * Esse nível é o que torna o fluxo manutenível. Com 3 variações por passo,
+ * ligar dois passos no modelo opção→opção custava 3×3 arestas e cada variação
+ * nova custava mais 6. Apontando pro menu, ligar custa 1 e a variação nova custa
+ * zero: ela nasce dentro do menu que todo mundo já enxerga.
+ *
+ * O destino tem dois níveis (o "Default" do Typebot): a opção pode ter o seu, e
+ * quando não tem, cai no padrão do MENU EM QUE FOI CLICADA. Por isso o caminho
+ * guarda o par (menu, opção) — a mesma opção reusada em dois menus pode seguir
+ * pra lugares diferentes, e é isso que resolve "o galho depende de como cheguei".
+ *
+ * Nada de banco e nada de React aqui: server e client importam o mesmo módulo.
  */
 
 export type NodeKind = (typeof scriptNodeKind.enumValues)[number];
 
-/** Um nó como o client recebe (já serializado, sem Date). */
-export type FlowNode = {
+/** Uma fala dentro de um menu. */
+export type FlowOption = {
   id: string;
   kind: NodeKind;
   titulo: string;
   fala: string | null;
   nota: string | null;
+  /** destino próprio; null = usa o padrão do menu de onde foi clicada */
+  proximoId: string | null;
+};
+
+/** Um momento da conversa: o card do canvas, a coluna da discagem. */
+export type FlowMenu = {
+  id: string;
+  nome: string;
   entrada: boolean;
-  ordem: number;
+  /** pra onde vão as opções sem destino próprio */
+  padraoId: string | null;
+  posX: number;
+  posY: number;
+  /** já na ordem de exibição */
+  opcoes: FlowOption[];
 };
 
-export type FlowEdge = { fromId: string; toId: string; ordem: number };
+/** O fluxo inteiro de uma carteira, como atravessa a fronteira server→client. */
+export type FlowGraph = { menus: FlowMenu[] };
 
-/** O grafo inteiro de uma carteira, do jeito que atravessa a fronteira server→client. */
-export type FlowGraph = {
-  nodes: FlowNode[];
-  edges: FlowEdge[];
-};
+/** Um passo do caminho percorrido: qual opção, clicada em qual menu. */
+export type Passo = { menuId: string; opcaoId: string };
 
-/** Um passo do caminho, como fica gravado em `activities.caminho`. */
+/** Como fica gravado em `activities.caminho` (formato estável desde o v1). */
 export type CaminhoStep = { nodeId: string; titulo: string; kind: string };
 
 export const KIND_LABELS: Record<NodeKind, string> = {
@@ -43,7 +62,7 @@ export const KIND_LABELS: Record<NodeKind, string> = {
 };
 
 /**
- * Cores por tipo de nó. Não é decoração: na ligação você precisa saber num
+ * Cores por tipo de opção. Não é decoração: na ligação você precisa saber num
  * relance se aquele card é a sua fala ou a reação dele, sem ler.
  */
 export const KIND_CLASSES: Record<NodeKind, { card: string; on: string; dot: string; texto: string }> = {
@@ -67,88 +86,113 @@ export const KIND_CLASSES: Record<NodeKind, { card: string; on: string; dot: str
   },
 };
 
-/** Índice de consulta rápida sobre o grafo — montado uma vez por render. */
 export type FlowIndex = {
-  byId: Map<string, FlowNode>;
-  /** filhos de cada nó, já na ordem da aresta */
-  filhos: Map<string, FlowNode[]>;
-  /** pais de cada nó — o "linkado em N lugares" do editor */
-  pais: Map<string, FlowNode[]>;
-  /** as aberturas: primeira coluna da ligação */
-  entradas: FlowNode[];
+  menus: Map<string, FlowMenu>;
+  opcoes: Map<string, FlowOption>;
+  /** em quais menus cada opção aparece — o "reusada em N lugares" do editor */
+  menusDaOpcao: Map<string, FlowMenu[]>;
+  /** quais menus apontam pra cada menu (por padrão ou por opção) */
+  origensDoMenu: Map<string, FlowMenu[]>;
+  entrada: FlowMenu | null;
 };
 
-const porOrdem = (a: { ordem: number; titulo: string }, b: { ordem: number; titulo: string }) =>
-  a.ordem - b.ordem || a.titulo.localeCompare(b.titulo, "pt-BR");
-
 export function indexGraph(graph: FlowGraph): FlowIndex {
-  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
-  const filhos = new Map<string, FlowNode[]>();
-  const pais = new Map<string, FlowNode[]>();
+  const menus = new Map(graph.menus.map((m) => [m.id, m]));
+  const opcoes = new Map<string, FlowOption>();
+  const menusDaOpcao = new Map<string, FlowMenu[]>();
+  const origensDoMenu = new Map<string, FlowMenu[]>();
 
-  // aresta órfã (nó apagado fora de uma transação) não pode derrubar a tela
-  const arestas = [...graph.edges].sort((a, b) => a.ordem - b.ordem);
-  for (const e of arestas) {
-    const from = byId.get(e.fromId);
-    const to = byId.get(e.toId);
-    if (!from || !to) continue;
-    if (!filhos.has(e.fromId)) filhos.set(e.fromId, []);
-    filhos.get(e.fromId)!.push(to);
-    if (!pais.has(e.toId)) pais.set(e.toId, []);
-    pais.get(e.toId)!.push(from);
+  const liga = (destinoId: string | null, origem: FlowMenu) => {
+    if (!destinoId || !menus.has(destinoId)) return;
+    const atual = origensDoMenu.get(destinoId) ?? [];
+    if (!atual.some((m) => m.id === origem.id)) atual.push(origem);
+    origensDoMenu.set(destinoId, atual);
+  };
+
+  for (const menu of graph.menus) {
+    liga(menu.padraoId, menu);
+    for (const op of menu.opcoes) {
+      opcoes.set(op.id, op);
+      const lista = menusDaOpcao.get(op.id) ?? [];
+      lista.push(menu);
+      menusDaOpcao.set(op.id, lista);
+      liga(op.proximoId, menu);
+    }
   }
 
-  const entradas = graph.nodes.filter((n) => n.entrada).sort(porOrdem);
-  return { byId, filhos, pais, entradas };
+  return { menus, opcoes, menusDaOpcao, origensDoMenu, entrada: graph.menus.find((m) => m.entrada) ?? null };
 }
 
-export const filhosDe = (ix: FlowIndex, id: string): FlowNode[] => ix.filhos.get(id) ?? [];
+/**
+ * Pra onde leva clicar `opcaoId` estando no menu `menuId`. O menu importa: a
+ * opção sem destino próprio herda o padrão de ONDE foi clicada.
+ */
+export function destinoDe(ix: FlowIndex, passo: Passo): FlowMenu | null {
+  const menu = ix.menus.get(passo.menuId);
+  const opcao = menu?.opcoes.find((o) => o.id === passo.opcaoId);
+  if (!menu || !opcao) return null;
+  const alvo = opcao.proximoId ?? menu.padraoId;
+  return alvo ? (ix.menus.get(alvo) ?? null) : null;
+}
 
 /**
- * As colunas a desenhar para um caminho. Coluna 0 = as aberturas; coluna i+1 =
- * os filhos do nó escolhido na coluna i.
+ * As colunas a desenhar para um caminho. Coluna 0 = o menu de entrada; coluna
+ * i+1 = o destino do passo i.
  *
- * `incluirVazia` decide o que fazer quando o último passo escolhido não tem
- * filhos: na ligação a coluna vazia é ruído (não há pra onde ir), mas no editor
- * ela é o único lugar onde cabe o "+ próximo passo" — sem ela um nó folha nunca
- * ganharia o primeiro filho.
+ * `incluirVazia` decide o que fazer quando o último passo não leva a lugar
+ * nenhum: na ligação a coluna vazia é ruído, mas no editor é onde cabe o
+ * "definir destino".
  *
- * É iterativo de propósito: um ciclo no grafo ("volta pra objeção") faz você
- * andar em círculo, que é o comportamento certo — não trava a renderização.
+ * Iterativo de propósito: um ciclo ("volta pra objeção") faz você andar em
+ * círculo, que é o comportamento certo — não trava a renderização.
  */
 export function colunasDoCaminho(
   ix: FlowIndex,
-  caminho: string[],
+  caminho: Passo[],
   { incluirVazia = false }: { incluirVazia?: boolean } = {},
-): { escolhido: string | null; opcoes: FlowNode[] }[] {
-  const cols: { escolhido: string | null; opcoes: FlowNode[] }[] = [{ escolhido: caminho[0] ?? null, opcoes: ix.entradas }];
-  for (const [i, id] of caminho.entries()) {
-    const opcoes = filhosDe(ix, id);
-    if (!opcoes.length) {
-      if (incluirVazia && i === caminho.length - 1) cols.push({ escolhido: null, opcoes: [] });
+): { menu: FlowMenu; escolhida: string | null }[] {
+  if (!ix.entrada) return [];
+  const cols: { menu: FlowMenu; escolhida: string | null }[] = [
+    { menu: ix.entrada, escolhida: caminho[0]?.opcaoId ?? null },
+  ];
+  for (const [i, passo] of caminho.entries()) {
+    const destino = destinoDe(ix, passo);
+    if (!destino) {
+      if (incluirVazia && i === caminho.length - 1) break; // o editor trata o fim do galho no painel
       break;
     }
-    cols.push({ escolhido: caminho[i + 1] ?? null, opcoes });
+    cols.push({ menu: destino, escolhida: caminho[i + 1]?.opcaoId ?? null });
   }
   return cols;
 }
 
 /**
- * Clique na coluna `nivel`: trunca o caminho ali e põe o nó novo no lugar.
- * Clicar no nó que já estava escolhido desfaz (volta um passo) — é como você
- * corrige no meio da ligação sem ter que recomeçar.
+ * Clique na coluna `nivel`: trunca o caminho ali e põe a opção nova no lugar.
+ * Clicar na opção já escolhida desfaz (volta um passo) — é como você corrige no
+ * meio da ligação sem recomeçar.
  */
-export function escolher(caminho: string[], nivel: number, nodeId: string): string[] {
-  if (caminho[nivel] === nodeId) return caminho.slice(0, nivel);
-  return [...caminho.slice(0, nivel), nodeId];
+export function escolher(caminho: Passo[], nivel: number, menuId: string, opcaoId: string): Passo[] {
+  if (caminho[nivel]?.opcaoId === opcaoId) return caminho.slice(0, nivel);
+  return [...caminho.slice(0, nivel), { menuId, opcaoId }];
 }
 
-/** Caminho (ids) → o que vai gravado na ligação. Ignora id que não existe mais. */
-export function caminhoParaRegistro(ix: FlowIndex, caminho: string[]): CaminhoStep[] {
+/** Caminho → o que vai gravado na ligação. Ignora opção que não existe mais. */
+export function caminhoParaRegistro(ix: FlowIndex, caminho: Passo[]): CaminhoStep[] {
   return caminho
-    .map((id) => ix.byId.get(id))
-    .filter((n): n is FlowNode => Boolean(n))
-    .map((n) => ({ nodeId: n.id, titulo: n.titulo, kind: n.kind }));
+    .map((p) => ix.opcoes.get(p.opcaoId))
+    .filter((o): o is FlowOption => Boolean(o))
+    .map((o) => ({ nodeId: o.id, titulo: o.titulo, kind: o.kind }));
+}
+
+/** Opções que nenhum menu contém — existem no banco mas ninguém alcança. */
+export function opcoesSoltas(graph: FlowGraph, todas: FlowOption[]): FlowOption[] {
+  const usadas = new Set(graph.menus.flatMap((m) => m.opcoes.map((o) => o.id)));
+  return todas.filter((o) => !usadas.has(o.id));
+}
+
+/** Menus que ninguém alcança (e não são a entrada) — galho órfão no canvas. */
+export function menusSoltos(ix: FlowIndex): FlowMenu[] {
+  return [...ix.menus.values()].filter((m) => !m.entrada && !(ix.origensDoMenu.get(m.id)?.length ?? 0));
 }
 
 // ---------------------------------------------------------------- aprendizado
@@ -163,24 +207,22 @@ export type NodeStat = {
   nodeId: string;
   titulo: string;
   kind: string;
-  /** quantas ligações passaram por esse nó */
+  /** quantas ligações passaram por essa opção */
   passou: number;
-  /** quantas passaram e terminaram em reunião */
   reuniao: number;
-  /** quantas passaram e terminaram em e-mail nominal */
   email: number;
-  /** quantas MORRERAM aqui — o nó foi o último do caminho, sem objetivo batido */
+  /** quantas MORRERAM aqui — foi a última do caminho, sem objetivo batido */
   morreu: number;
 };
 
 /**
- * Estatística por nó do fluxo. É o pagamento do modelo: em vez de "onde travou"
- * digitado à mão, a pergunta "qual abertura converte" e "onde a conversa morre"
- * viram contagem em cima de dado estruturado.
+ * Estatística por opção. É o pagamento do modelo: em vez de "onde travou"
+ * digitado à mão, "qual abertura converte" e "onde a conversa morre" viram
+ * contagem em cima de dado estruturado.
  *
- * `morreu` é o que o motivo.md chama de morte da conversa: último nó do caminho
- * numa ligação em que você falou com humano e não bateu objetivo nenhum. Sem
- * humano não conta — não atender não é o script falhando.
+ * `morreu` é a morte da conversa: última opção do caminho numa ligação em que
+ * você falou com humano e não bateu objetivo. Sem humano não conta — não
+ * atender não é o script falhando.
  */
 export function statsPorNo(rows: CaminhoRow[]): NodeStat[] {
   const acc = new Map<string, NodeStat>();
@@ -190,7 +232,7 @@ export function statsPorNo(rows: CaminhoRow[]): NodeStat[] {
       cur = { nodeId: s.nodeId, titulo: s.titulo, kind: s.kind, passou: 0, reuniao: 0, email: 0, morreu: 0 };
       acc.set(s.nodeId, cur);
     }
-    // o título mais recente ganha: nó renomeado não vira duas linhas
+    // o título mais recente ganha: opção renomeada não vira duas linhas
     cur.titulo = s.titulo;
     return cur;
   };
@@ -198,7 +240,7 @@ export function statsPorNo(rows: CaminhoRow[]): NodeStat[] {
   for (const row of rows) {
     const passos = row.caminho;
     if (!passos?.length) continue;
-    // um ciclo pode repetir o nó no caminho — conta a ligação uma vez só
+    // um ciclo pode repetir a opção no caminho — conta a ligação uma vez só
     const vistos = new Set<string>();
     for (const passo of passos) {
       const stat = pega(passo);
@@ -217,8 +259,8 @@ export function statsPorNo(rows: CaminhoRow[]): NodeStat[] {
 }
 
 /**
- * Comparação entre as ABERTURAS — o A/B que o motivo.md manda fazer em blocos
- * de 20 ligações. Só os nós marcados como entrada, ordenados por conversão.
+ * Comparação entre as ABERTURAS — o A/B em blocos de 20 ligações. Só as opções
+ * do menu de entrada, ordenadas por conversão.
  */
 export function statsDeAbertura(rows: CaminhoRow[], entradaIds: Set<string>): NodeStat[] {
   const primeiras = rows
