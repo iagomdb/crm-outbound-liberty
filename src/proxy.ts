@@ -26,8 +26,13 @@ function buildCsp(nonce: string, isDev: boolean): string {
     // carrega (os chunks /_next/*), sem precisar listar cada um. 'unsafe-eval' só
     // em dev (React usa eval pra montar stack traces).
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
-    // em dev o Next injeta estilos inline sem nonce; em prod usamos o nonce
-    `style-src 'self' ${isDev ? "'unsafe-inline'" : `'nonce-${nonce}'`}`,
+    // ESTILO é 'unsafe-inline', de propósito. Nonce em style-src bloqueia os
+    // ATRIBUTOS style="" — e eles são inevitáveis aqui: as barras de progresso
+    // (fila, aprendizado, kanban) e o canvas do fluxo, que posiciona tudo com
+    // transform inline. Com nonce, essas telas renderizavam erradas só em
+    // produção, sem erro visível. O risco real de XSS mora em script-src, que
+    // continua estrito (nonce + strict-dynamic).
+    `style-src 'self' 'unsafe-inline'`,
     `img-src 'self' blob: data:`,
     `font-src 'self'`,
     `object-src 'none'`,
