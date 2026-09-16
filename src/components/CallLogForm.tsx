@@ -4,6 +4,7 @@ import { useState, useSyncExternalStore } from "react";
 import { useFormStatus } from "react-dom";
 import { Button, Input, Select, Textarea, labelClasses } from "@/components/ui";
 import { abordagemStore } from "@/lib/abordagem-store";
+import { caminhoStore } from "@/lib/caminho-store";
 import {
   COBRANCA_LABELS,
   DOR_LABELS,
@@ -51,6 +52,9 @@ export function CallLogForm({
   const [stage, setStage] = useState("");
   // variações de abordagem escolhidas no checklist (PitchPanel) — vão junto no registro
   const abordagens = useSyncExternalStore(abordagemStore.subscribe, abordagemStore.getSnapshot, () => "[]");
+  // o caminho percorrido no fluxo (aba 🌳) — ORDENADO: é dele que sai, depois,
+  // qual abertura converte e em que passo a conversa morreu
+  const caminho = useSyncExternalStore(caminhoStore.subscribe, caminhoStore.getSnapshot, () => "[]");
   // fim de ciclo ⇒ o servidor LIMPA a task (regra de ouro) — esconder os campos
   // de próxima ação pra tela não sugerir que um retorno será agendado
   const isCycleEnd = stage === "ganho" || stage === "perdido" || stage === "handoff";
@@ -58,6 +62,7 @@ export function CallLogForm({
   return (
     <form action={action} className="flex flex-col gap-3">
       <input type="hidden" name="abordagens" value={abordagens} />
+      <input type="hidden" name="caminho" value={caminho} />
       <label className="flex items-center gap-2 rounded-md bg-zinc-100 px-3 py-2 dark:bg-zinc-800">
         <input type="checkbox" name="reachedHuman" className="h-4 w-4" />
         <span className="text-sm font-medium">Falou com humano? (conta como conversa)</span>

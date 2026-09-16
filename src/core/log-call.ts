@@ -33,6 +33,8 @@ export type CallInput = {
   notes: string | null;
   // leitura de mercado (estatística de ICP) — tudo opcional, null = não avaliado
   abordagens: { itemId: string; categoria: string; opcao: string }[] | null;
+  /** passos do fluxo percorridos nesta ligação, na ordem em que foram clicados */
+  caminho: { nodeId: string; titulo: string; kind: string }[] | null;
   dorPercebida: number | null;
   icpGrade: IcpGradeT | null;
   tipoCobranca: CobrancaT | null;
@@ -106,6 +108,7 @@ export async function recordCall(db: DB, targetId: string, input: CallInput) {
       objectiveHit: input.objectiveHit,
       dorPercebida: input.dorPercebida,
       abordagens: input.abordagens,
+      caminho: input.caminho,
       goldenHour: isGoldenHour(now),
       nextActionAt: task.nextActionAt,
       nextActionPretext: task.nextActionPretext,

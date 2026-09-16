@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/auth/dal";
-import { getAprendizado, getCampaignBySlug, getFunnelMetrics } from "@/db/queries";
+import { getAprendizado, getCaminhoRows, getCampaignBySlug, getFunnelMetrics, getScriptGraph } from "@/db/queries";
 import { OBJECTION_LABELS } from "@/core/pipeline";
+import { KIND_CLASSES, statsDeAbertura, statsPorNo, type NodeKind, type NodeStat } from "@/core/script-flow";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,28 @@ const pctOf = (n: number, total: number) => (total > 0 ? `${Math.round((n / tota
 
 function Empty({ children }: { children: React.ReactNode }) {
   return <p className="text-sm text-zinc-500">{children}</p>;
+}
+
+/** Uma linha de estatística de passo: quantas passaram e quanto virou objetivo. */
+function StatRow({ stat }: { stat: NodeStat }) {
+  const conv = stat.reuniao + stat.email;
+  return (
+    <li className="flex items-center justify-between gap-3 py-2 text-sm">
+      <span className="flex min-w-0 items-center gap-2">
+        <span className={`size-2 shrink-0 rounded-full ${KIND_CLASSES[stat.kind as NodeKind]?.dot ?? "bg-zinc-400"}`} />
+        <span className="truncate">{stat.titulo}</span>
+      </span>
+      <span className="flex shrink-0 items-center gap-3 text-xs text-zinc-500">
+        <span className="tabular-nums">{stat.passou}× usada</span>
+        <span
+          className={conv > 0 ? "font-medium text-emerald-600 dark:text-emerald-400" : "text-zinc-400"}
+          title={`${stat.reuniao} reuniões · ${stat.email} e-mails nominais`}
+        >
+          {pctOf(conv, stat.passou)} objetivo
+        </span>
+      </span>
+    </li>
+  );
 }
 
 /**
@@ -23,10 +46,19 @@ export default async function AprendizadoPage({ params }: { params: Promise<{ sl
   const campaign = await getCampaignBySlug(slug);
   if (!campaign) notFound();
 
-  const [{ perdas, objecoes, frases }, metrics] = await Promise.all([
+  const [{ perdas, objecoes, frases }, metrics, caminhos, graph] = await Promise.all([
     getAprendizado(campaign.id),
     getFunnelMetrics(campaign.id),
+    getCaminhoRows(campaign.id),
+    getScriptGraph(campaign.id),
   ]);
+
+  // o que o fluxo ensinou: por onde a conversa passou e onde ela morreu.
+  // Vem do caminho clicado na ligação — nada disso é digitado à mão.
+  const entradaIds = new Set(graph.nodes.filter((n) => n.entrada).map((n) => n.id));
+  const aberturas = statsDeAbertura(caminhos, entradaIds);
+  const passos = statsPorNo(caminhos);
+  const mortes = [...passos].filter((p) => p.morreu > 0).sort((a, b) => b.morreu - a.morreu);
 
   const totalPerdas = perdas.reduce((s, p) => s + p.n, 0);
   const totalObjecoes = objecoes.reduce((s, o) => s + o.n, 0);
@@ -45,6 +77,76 @@ export default async function AprendizadoPage({ params }: { params: Promise<{ sl
           onde a conversa morre.
         </p>
       </div>
+
+      {/* o fluxo: qual abertura converte */}
+      <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-semibold">🌳 Aberturas — qual entra melhor</h2>
+          <span className="text-xs text-zinc-400">{caminhos.length} ligações passaram pelo fluxo</span>
+        </div>
+        {aberturas.length === 0 ? (
+          <Empty>
+            Nada ainda. Monte o fluxo em{" "}
+            <Link href={`/campaigns/${slug}/fluxo`} className="text-sky-600 hover:underline dark:text-sky-400">
+              🌳 fluxo
+            </Link>{" "}
+            e navegue por ele durante a ligação — o caminho vira estatística sozinho.
+          </Empty>
+        ) : (
+          <>
+            <ul className="mt-3 flex flex-col divide-y divide-zinc-100 dark:divide-zinc-900">
+              {aberturas.map((a) => (
+                <StatRow key={a.nodeId} stat={a} />
+              ))}
+            </ul>
+            <p className="mt-3 text-xs text-zinc-400">
+              O playbook manda testar em blocos de ~20 ligações por variante, sem misturar. Abertura com menos de 20
+              ligações ainda não diz nada.
+            </p>
+          </>
+        )}
+      </section>
+
+      {/* o fluxo: onde a conversa morre */}
+      <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-semibold">🪦 Onde a conversa morre</h2>
+          <span className="text-xs text-zinc-400">último passo em ligação com humano e sem objetivo batido</span>
+        </div>
+        {mortes.length === 0 ? (
+          <Empty>Nenhuma conversa morreu no meio do fluxo ainda.</Empty>
+        ) : (
+          <ul className="mt-3 flex flex-col divide-y divide-zinc-100 dark:divide-zinc-900">
+            {mortes.slice(0, 15).map((m) => (
+              <li key={m.nodeId} className="flex items-center justify-between gap-3 py-2 text-sm">
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className={`size-2 shrink-0 rounded-full ${KIND_CLASSES[m.kind as NodeKind]?.dot ?? "bg-zinc-400"}`} />
+                  <span className="truncate">{m.titulo}</span>
+                </span>
+                <span className="shrink-0 text-xs text-zinc-500">
+                  morreu <strong className="tabular-nums text-zinc-900 dark:text-zinc-100">{m.morreu}</strong>×{" "}
+                  <span className="text-zinc-400">de {m.passou} passagens</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* o fluxo: passo a passo */}
+      {passos.length > 0 && (
+        <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-sm font-semibold">Passos mais percorridos</h2>
+            <span className="text-xs text-zinc-400">{passos.length} passos usados</span>
+          </div>
+          <ul className="mt-3 flex flex-col divide-y divide-zinc-100 dark:divide-zinc-900">
+            {passos.slice(0, 20).map((p) => (
+              <StatRow key={p.nodeId} stat={p} />
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* motivos de perda */}
       <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">

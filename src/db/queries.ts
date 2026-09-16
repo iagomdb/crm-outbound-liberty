@@ -1,10 +1,22 @@
 import { and, asc, count, desc, eq, inArray, isNull, lt, not, notInArray, or, sql } from "drizzle-orm";
 import { getDb } from "./index";
-import { activities, campaigns, checklistItems, companies, contacts, emailTemplates, meetings, targets } from "./schema";
+import {
+  activities,
+  campaigns,
+  checklistItems,
+  companies,
+  contacts,
+  emailTemplates,
+  meetings,
+  scriptEdges,
+  scriptNodes,
+  targets,
+} from "./schema";
 import type { IcpRawCall, IcpRawMeeting, IcpRawTarget } from "@/core/icp-stats";
 import { type Stage, TERMINAL_STAGES } from "@/core/pipeline";
 import { CYCLE_END_STAGES } from "@/core/tasks";
 import type { FunnelCounts } from "@/core/funnel";
+import type { CaminhoRow, FlowGraph } from "@/core/script-flow";
 
 export type CampaignStats = {
   id: string;
@@ -160,6 +172,58 @@ export async function getChecklistItems(campaignId: string) {
     with: { opcoes: { orderBy: (o, { asc }) => [asc(o.ordem), asc(o.createdAt)] } },
     orderBy: (c, { asc }) => [asc(c.ordem), asc(c.createdAt)],
   });
+}
+
+// ---------------------------------------------------------------- fluxo (grafo do script)
+
+/**
+ * O grafo do fluxo de uma carteira, inteiro e plano — nós + arestas. Vai direto
+ * pro client (é pequeno: dezenas de nós) e a forma é montada lá com
+ * `indexGraph`. Buscar por níveis daria N+1 e não teria ganho nenhum.
+ */
+export async function getScriptGraph(campaignId: string): Promise<FlowGraph> {
+  const db = getDb();
+  const nodes = await db
+    .select({
+      id: scriptNodes.id,
+      kind: scriptNodes.kind,
+      titulo: scriptNodes.titulo,
+      fala: scriptNodes.fala,
+      nota: scriptNodes.nota,
+      entrada: scriptNodes.entrada,
+      ordem: scriptNodes.ordem,
+    })
+    .from(scriptNodes)
+    .where(eq(scriptNodes.campaignId, campaignId))
+    .orderBy(asc(scriptNodes.ordem), asc(scriptNodes.createdAt));
+
+  if (!nodes.length) return { nodes: [], edges: [] };
+
+  const edges = await db
+    .select({ fromId: scriptEdges.fromId, toId: scriptEdges.toId, ordem: scriptEdges.ordem })
+    .from(scriptEdges)
+    .innerJoin(scriptNodes, eq(scriptEdges.fromId, scriptNodes.id))
+    .where(eq(scriptNodes.campaignId, campaignId))
+    .orderBy(asc(scriptEdges.ordem));
+
+  return { nodes, edges };
+}
+
+/**
+ * Os caminhos percorridos nas ligações da carteira — matéria-prima do
+ * Aprendizado por nó (core/script-flow.ts). Só ligação que andou pelo fluxo.
+ */
+export async function getCaminhoRows(campaignId: string): Promise<CaminhoRow[]> {
+  const db = getDb();
+  return db
+    .select({
+      caminho: activities.caminho,
+      reachedHuman: activities.reachedHuman,
+      objectiveHit: activities.objectiveHit,
+    })
+    .from(activities)
+    .innerJoin(targets, eq(activities.targetId, targets.id))
+    .where(and(eq(targets.campaignId, campaignId), sql`jsonb_array_length(coalesce(${activities.caminho}, '[]'::jsonb)) > 0`));
 }
 
 // ---------------------------------------------------------------- roleta (randomizador de ligação)

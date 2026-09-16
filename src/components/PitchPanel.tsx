@@ -3,11 +3,18 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { abordagemStore } from "@/lib/abordagem-store";
+import { ScriptFlow } from "@/components/flow/ScriptFlow";
+import type { FlowGraph } from "@/core/script-flow";
 
-// Painel das telas de ligação (fila e target): aba 📜 Pitch (script renderizado,
-// vem pronto do server) e aba ✅ Checklist. Item simples = marcável; item com
-// variações = CATEGORIA: escolher qual variação usou completa e colapsa o grupo,
-// e a escolha vai junto no registro da ligação (via abordagemStore) pro A/B.
+// Painel das telas de ligação (fila e target), três abas:
+//   🌳 Fluxo     — o script ramificado, navegado por colunas conforme a conversa
+//                  anda. É a aba padrão quando a carteira tem fluxo montado.
+//   📜 Pitch     — o script em markdown, corrido (vem renderizado do server).
+//   ✅ Checklist — objetivos marcáveis; item com variações = CATEGORIA, e
+//                  escolher qual usou vai junto no registro (abordagemStore).
+//
+// As três convivem de propósito: o markdown segue sendo o lugar do que não é
+// fala (ICP, tom, fundamentos), e o checklist, dos objetivos da ligação.
 // Estado é só da tela — cada empresa nova começa zerada (key por target).
 
 export type ChecklistItemView = {
@@ -27,6 +34,8 @@ const tabClasses = (active: boolean) =>
 export function PitchPanel({
   campaignName,
   editHref,
+  fluxoHref,
+  graph,
   items,
   hasScript,
   contentMaxH = "max-h-[calc(100vh-10rem)]",
@@ -34,6 +43,9 @@ export function PitchPanel({
 }: {
   campaignName: string;
   editHref: string | null;
+  /** editor do fluxo da carteira (null quando a carteira não tem slug) */
+  fluxoHref: string | null;
+  graph: FlowGraph;
   items: ChecklistItemView[];
   hasScript: boolean;
   /** altura máxima do conteúdo (a tela do target divide a coluna com o form de ligação) */
@@ -41,7 +53,9 @@ export function PitchPanel({
   /** o pitch já renderizado (Markdown é server component) */
   children: ReactNode;
 }) {
-  const [tab, setTab] = useState<"pitch" | "checklist">("pitch");
+  const temFluxo = graph.nodes.some((n) => n.entrada);
+  // fluxo montado ⇒ é por ele que a ligação começa; sem fluxo, nada muda
+  const [tab, setTab] = useState<"fluxo" | "pitch" | "checklist">(temFluxo ? "fluxo" : "pitch");
   const [checked, setChecked] = useState<Set<string>>(new Set());
   // categoria (item com variações) → id da opção escolhida
   const [chosen, setChosen] = useState<Map<string, string>>(new Map());
@@ -86,6 +100,9 @@ export function PitchPanel({
   return (
     <div className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
       <div className="flex items-center gap-1.5 border-b border-zinc-100 px-3 py-2 dark:border-zinc-900">
+        <button type="button" className={tabClasses(tab === "fluxo")} onClick={() => setTab("fluxo")}>
+          🌳 Fluxo
+        </button>
         <button type="button" className={tabClasses(tab === "pitch")} onClick={() => setTab("pitch")}>
           📜 Pitch
         </button>
@@ -96,6 +113,8 @@ export function PitchPanel({
       </div>
 
       <div className={`${contentMaxH} overflow-y-auto p-5`}>
+        {tab === "fluxo" && <ScriptFlow graph={graph} editHref={fluxoHref} />}
+
         {tab === "pitch" &&
           (hasScript ? (
             children

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/auth/dal";
-import { getTargetDetail } from "@/db/queries";
+import { getScriptGraph, getTargetDetail } from "@/db/queries";
 import { StageBadge } from "@/components/StageBadge";
 import { CallLogForm } from "@/components/CallLogForm";
 import { ActivityHistory } from "@/components/ActivityHistory";
@@ -34,6 +34,9 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
   const { id } = await params;
   const t = await getTargetDetail(id);
   if (!t) notFound();
+
+  // o fluxo da carteira (grafo do script) — aba 🌳 do painel de discagem
+  const graph = await getScriptGraph(t.campaignId);
 
   const co = t.company;
   const death = deathFor({ attempts: t.attempts, stageChangedAt: t.stageChangedAt, stage: t.stage });
@@ -129,6 +132,8 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
             key={t.id}
             campaignName={t.campaign.name}
             editHref={t.campaign.slug ? `/campaigns/${t.campaign.slug}/editar` : null}
+            fluxoHref={t.campaign.slug ? `/campaigns/${t.campaign.slug}/fluxo` : null}
+            graph={graph}
             items={t.campaign.checklistItems}
             hasScript={Boolean(t.campaign.script)}
             contentMaxH="max-h-[40vh]"

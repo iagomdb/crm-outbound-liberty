@@ -4,6 +4,8 @@
  *
  *   campaigns  → o "projeto"/oferta (multi-campanha). #1 = Recuperação de Crédito
  *                agrupadas por `conta` = pra quem a prospecção é feita
+ *   script_nodes/edges → o FLUXO da carteira: grafo do script ramificado
+ *                (abertura → reação → objeção → test drive → saída)
  *   companies  → global, chave = CNPJ (dados do export consultas.plus)
  *   contacts   → pessoa na empresa (papel: atendente/analista/decisor; email nominal vs genérico)
  *   targets    → empresa ↔ campanha = o registro de pipeline (estágio, cadência, pretexto novo)
@@ -67,6 +69,12 @@ export const objectionType = pgEnum("objection_type", [
   "sem_tempo",
   "outra",
 ]);
+
+/**
+ * Tipo do nó do FLUXO (grafo do script — `script_nodes`). Colore a coluna e diz
+ * de quem é a vez: eu falo, ele reage, ou a conversa terminou ali.
+ */
+export const scriptNodeKind = pgEnum("script_node_kind", ["fala", "reacao", "saida"]);
 
 // ---- campos de estatística de ICP (validação de hipótese de mercado por segmento)
 
@@ -160,6 +168,62 @@ export const checklistOptions = pgTable(
     ...timestamps,
   },
   (t) => [index("checklist_options_item_idx").on(t.itemId)],
+);
+
+// ---------------------------------------------------------------- script_nodes / script_edges
+// O FLUXO da carteira: script ramificado (não linear). Um nó é UM movimento da
+// conversa — uma abertura, uma reação dele, uma objeção, um test drive, uma saída.
+// As arestas dizem o que pode vir depois de quê.
+//
+// É GRAFO, não árvore: o mesmo nó pode ser filho de vários pais. "Manda no zap"
+// vem depois da abertura E depois da CTA e é o MESMO nó — edita num lugar, muda
+// em todos, e a estatística dele não fragmenta em cópias.
+//
+// Na discagem vira colunas (estilo Finder): clica na abertura, abre a coluna das
+// reações; clica na reação, abre a seguinte. O caminho percorrido vai pro
+// registro da ligação (`activities.caminho`) e alimenta o Aprendizado.
+export const scriptNodes = pgTable(
+  "script_nodes",
+  {
+    id: uuid().defaultRandom().primaryKey(),
+    campaignId: uuid()
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    kind: scriptNodeKind().notNull().default("fala"),
+    titulo: text().notNull(), // rótulo curto do card ("A3 · manda no zap")
+    fala: text(), // o texto exato, lido em voz alta (markdown)
+    nota: text(), // dica de tom / quando usar — só aparece no nó aberto
+    /** true = ponto de partida da ligação (as aberturas). São a 1ª coluna. */
+    entrada: boolean().notNull().default(false),
+    ordem: integer().notNull().default(0),
+    ...timestamps,
+  },
+  (t) => [
+    index("script_nodes_campaign_idx").on(t.campaignId),
+    index("script_nodes_entrada_idx").on(t.campaignId, t.entrada),
+  ],
+);
+
+// Aresta dirigida: depois de `from` pode vir `to`. Ciclo é permitido e
+// inofensivo — a navegação é iterativa sobre o caminho, não recursiva no grafo.
+export const scriptEdges = pgTable(
+  "script_edges",
+  {
+    id: uuid().defaultRandom().primaryKey(),
+    fromId: uuid()
+      .notNull()
+      .references(() => scriptNodes.id, { onDelete: "cascade" }),
+    toId: uuid()
+      .notNull()
+      .references(() => scriptNodes.id, { onDelete: "cascade" }),
+    ordem: integer().notNull().default(0),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("script_edges_from_to_uidx").on(t.fromId, t.toId),
+    index("script_edges_from_idx").on(t.fromId),
+    index("script_edges_to_idx").on(t.toId),
+  ],
 );
 
 // ---------------------------------------------------------------- companies (global, por CNPJ)
@@ -281,6 +345,10 @@ export const activities = pgTable(
     dorPercebida: integer(), // 0-4: intensidade da dor percebida NESTA ligação (null = não avaliado)
     // variações de abordagem usadas NESTA ligação (categoria do checklist → opção escolhida)
     abordagens: jsonb().$type<{ itemId: string; categoria: string; opcao: string }[]>(),
+    // o CAMINHO percorrido no fluxo (script_nodes), na ordem em que foi clicado.
+    // O último item é onde a conversa parou. Guarda o título junto: o registro
+    // segue legível mesmo se o nó for renomeado ou apagado depois.
+    caminho: jsonb().$type<{ nodeId: string; titulo: string; kind: string }[]>(),
     durationSec: integer(),
     outcome: text(), // resultado em 1 linha
     stalledAt: text(), // onde travou (a frase exata onde esfriou)
@@ -347,6 +415,7 @@ export const sessions = pgTable(
 export const campaignsRelations = relations(campaigns, ({ many }) => ({
   targets: many(targets),
   checklistItems: many(checklistItems),
+  scriptNodes: many(scriptNodes),
 }));
 
 export const checklistItemsRelations = relations(checklistItems, ({ one, many }) => ({
@@ -356,6 +425,17 @@ export const checklistItemsRelations = relations(checklistItems, ({ one, many })
 
 export const checklistOptionsRelations = relations(checklistOptions, ({ one }) => ({
   item: one(checklistItems, { fields: [checklistOptions.itemId], references: [checklistItems.id] }),
+}));
+
+export const scriptNodesRelations = relations(scriptNodes, ({ one, many }) => ({
+  campaign: one(campaigns, { fields: [scriptNodes.campaignId], references: [campaigns.id] }),
+  saidas: many(scriptEdges, { relationName: "saidas" }),
+  entradas: many(scriptEdges, { relationName: "entradas" }),
+}));
+
+export const scriptEdgesRelations = relations(scriptEdges, ({ one }) => ({
+  from: one(scriptNodes, { fields: [scriptEdges.fromId], references: [scriptNodes.id], relationName: "saidas" }),
+  to: one(scriptNodes, { fields: [scriptEdges.toId], references: [scriptNodes.id], relationName: "entradas" }),
 }));
 
 export const companiesRelations = relations(companies, ({ many }) => ({

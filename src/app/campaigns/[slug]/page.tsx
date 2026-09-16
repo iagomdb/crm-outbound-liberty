@@ -105,6 +105,9 @@ export default async function CampaignBoard({ params }: { params: Promise<{ slug
           <ButtonLink href={`/campaigns/${slug}/fora-do-ciclo`} size="sm" variant="ghost">
             fora do ciclo
           </ButtonLink>
+          <ButtonLink href={`/campaigns/${slug}/fluxo`} size="sm" variant="ghost">
+            🌳 fluxo
+          </ButtonLink>
           <ButtonLink href={`/campaigns/${slug}/aprendizado`} size="sm" variant="ghost">
             aprendizado
           </ButtonLink>

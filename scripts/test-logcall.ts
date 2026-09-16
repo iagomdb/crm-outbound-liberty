@@ -42,6 +42,10 @@ async function main() {
     lostReason: null,
     notes: null,
     abordagens: [{ itemId: "teste", categoria: "Abertura", opcao: "Abertura direta" }],
+    caminho: [
+      { nodeId: "n1", titulo: "Abertura — contexto nv3", kind: "fala" },
+      { nodeId: "n2", titulo: "A3 · manda no zap", kind: "reacao" },
+    ],
     dorPercebida: 3,
     icpGrade: "B",
     tipoCobranca: "cobranca_interna",
@@ -58,6 +62,10 @@ async function main() {
   );
   const [a1] = await db.select().from(activities).where(eq(activities.id, r1.activityId));
   assert(a1.reachedHuman && a1.stalledAt === "manda um e-mail", "atividade gravada (reached_human + stalled_at)");
+  assert(
+    a1.caminho?.length === 2 && a1.caminho[1].titulo === "A3 · manda no zap",
+    "caminho do fluxo gravado na ordem (alimenta o Aprendizado por passo)",
+  );
 
   // 2) objetivo reunião → estágio + reunião criada
   const when = new Date(Date.now() + 86_400_000);
@@ -79,6 +87,7 @@ async function main() {
     lostReason: null,
     notes: null,
     abordagens: null,
+    caminho: null,
     dorPercebida: null,
     icpGrade: null,
     tipoCobranca: null,

@@ -17,6 +17,21 @@ function parseAbordagens(raw: string): CallInput["abordagens"] {
     return null;
   }
 }
+/** JSON do hidden "caminho" (passos clicados no fluxo, na ordem) → validado. */
+function parseCaminho(raw: string): CallInput["caminho"] {
+  try {
+    const arr = JSON.parse(raw || "[]");
+    if (!Array.isArray(arr)) return null;
+    const clean = arr.filter(
+      (p): p is { nodeId: string; titulo: string; kind: string } =>
+        p && typeof p.nodeId === "string" && typeof p.titulo === "string" && typeof p.kind === "string",
+    );
+    return clean.length ? clean : null;
+  } catch {
+    return null;
+  }
+}
+
 const on = (v: FormDataEntryValue | null) => v === "on" || v === "true";
 const tri = (fd: FormData, key: string): boolean | null => (fd.get(key) == null ? null : on(fd.get(key)));
 
@@ -44,6 +59,7 @@ export function parseCallForm(formData: FormData): CallInput {
     lostReason: str(formData.get("lostReason")) || null,
     notes: str(formData.get("notes")) || null,
     abordagens: parseAbordagens(str(formData.get("abordagens"))),
+    caminho: parseCaminho(str(formData.get("caminho"))),
     dorPercebida: str(formData.get("dorPercebida")) === "" ? null : Number(str(formData.get("dorPercebida"))),
     icpGrade: (str(formData.get("icpGrade")) || null) as CallInput["icpGrade"],
     tipoCobranca: (str(formData.get("tipoCobranca")) || null) as CallInput["tipoCobranca"],

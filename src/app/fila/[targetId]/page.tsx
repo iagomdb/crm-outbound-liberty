@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/auth/dal";
-import { getNextInQueue, getTargetDetail, getTodayStats } from "@/db/queries";
+import { getNextInQueue, getScriptGraph, getTargetDetail, getTodayStats } from "@/db/queries";
 import { getContaAtiva } from "@/lib/conta-server";
 import { StageBadge } from "@/components/StageBadge";
 import { CallLogForm } from "@/components/CallLogForm";
@@ -59,6 +59,9 @@ export default async function TaskPage({
     getTodayStats(conta),
   ]);
   if (!t) notFound();
+
+  // o fluxo da carteira (grafo do script) — aba 🌳 do painel de discagem
+  const graph = await getScriptGraph(t.campaignId);
 
   const co = t.company;
   const death = deathFor({ attempts: t.attempts, stageChangedAt: t.stageChangedAt, stage: t.stage });
@@ -362,6 +365,8 @@ export default async function TaskPage({
             key={t.id}
             campaignName={t.campaign.name}
             editHref={t.campaign.slug ? `/campaigns/${t.campaign.slug}/editar` : null}
+            fluxoHref={t.campaign.slug ? `/campaigns/${t.campaign.slug}/fluxo` : null}
+            graph={graph}
             items={t.campaign.checklistItems}
             hasScript={Boolean(t.campaign.script)}
           >
