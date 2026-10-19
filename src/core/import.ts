@@ -218,13 +218,28 @@ const isHours = (s: string) => /fecha|reabre|abre [aà]s|abre \w{3}\.|aberto|fec
 const looksLikeAddress = (s: string) => s.length > 3 && /[a-zà-ú]/i.test(s) && !isHours(s);
 
 /**
+ * Última linha com algum valor. Planilha salva no LibreOffice com a coluna
+ * inteira formatada traz linhas vazias até a 1.048.576 — o rowCount do exceljs
+ * vai até lá, e varrer com getRow/getCell cria milhões de objetos (estoura a
+ * memória). eachRow sem includeEmpty pula buracos e linhas sem valor.
+ */
+function lastDataRow(ws: ExcelJS.Worksheet): number {
+  let last = 0;
+  ws.eachRow((_row, n) => {
+    last = n;
+  });
+  return last;
+}
+
+/**
  * Detecta a linha de cabeçalho (primeira, entre as 20 iniciais, cujas células
  * casam com ≥2 campos conhecidos — pula linhas de lixo/marca d'água) e coleta
  * amostras de cada coluna para a tela de mapeamento.
  */
 export function analyzeSheet(ws: ExcelJS.Worksheet): SheetAnalysis {
   let headerRowIdx = -1;
-  const scanMax = Math.min(ws.rowCount, 20);
+  const lastRow = lastDataRow(ws);
+  const scanMax = Math.min(lastRow, 20);
   for (let i = 1; i <= scanMax; i++) {
     let hits = 0;
     ws.getRow(i).eachCell((cell) => {
@@ -244,7 +259,7 @@ export function analyzeSheet(ws: ExcelJS.Worksheet): SheetAnalysis {
     const header = cellStr(cell.value);
     if (!header) return;
     const samples: string[] = [];
-    for (let r = headerRowIdx + 1; r <= ws.rowCount && samples.length < 3; r++) {
+    for (let r = headerRowIdx + 1; r <= lastRow && samples.length < 3; r++) {
       const v = cellStr(ws.getRow(r).getCell(col).value);
       if (v) samples.push(v.length > 60 ? `${v.slice(0, 60)}…` : v);
     }
@@ -252,7 +267,7 @@ export function analyzeSheet(ws: ExcelJS.Worksheet): SheetAnalysis {
   });
 
   let dataRowCount = 0;
-  for (let i = headerRowIdx + 1; i <= ws.rowCount; i++) {
+  for (let i = headerRowIdx + 1; i <= lastRow; i++) {
     let empty = true;
     ws.getRow(i).eachCell(() => {
       empty = false;
@@ -331,7 +346,8 @@ function* extractRows(ws: ExcelJS.Worksheet, headerRowIdx: number, mapping: Colu
   for (const f of IMPORT_FIELDS) fieldCols.set(f.key, colsFor(f.key));
   const mappedCols = Object.keys(mapping).map(Number);
 
-  for (let i = headerRowIdx + 1; i <= ws.rowCount; i++) {
+  const lastRow = lastDataRow(ws);
+  for (let i = headerRowIdx + 1; i <= lastRow; i++) {
     const row = ws.getRow(i);
     const val = (field: ImportField): string => {
       for (const c of fieldCols.get(field)!) {
