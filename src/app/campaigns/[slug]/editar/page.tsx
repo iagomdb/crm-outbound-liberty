@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { requireUser } from "@/auth/dal";
-import { getCampaignBySlug, getChecklistItems, getContas } from "@/db/queries";
+import { getAccess, getCarteiraOu404, isAdmin } from "@/auth/access";
+import { getChecklistItems, getContas } from "@/db/queries";
 import { ConfirmButton } from "@/components/ConfirmButton";
 import { ChecklistEditor } from "@/components/ChecklistEditor";
 import { Button, Field, Input, Select, Textarea } from "@/components/ui";
@@ -10,11 +9,9 @@ import { updateCampaign, deleteCampaign } from "../../actions";
 export const dynamic = "force-dynamic";
 
 export default async function EditCampaignPage({ params }: { params: Promise<{ slug: string }> }) {
-  await requireUser();
   const { slug } = await params;
-  const campaign = await getCampaignBySlug(slug);
-  if (!campaign) notFound();
-  const [items, contas] = await Promise.all([getChecklistItems(campaign.id), getContas()]);
+  const [campaign, access] = await Promise.all([getCarteiraOu404(slug), getAccess()]);
+  const [items, contas] = await Promise.all([getChecklistItems(campaign.id), getContas(access.campaignIds)]);
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-5">
@@ -90,22 +87,24 @@ export default async function EditCampaignPage({ params }: { params: Promise<{ s
         </Button>
       </form>
 
-      {/* zona de perigo */}
-      <div className="rounded-xl border border-red-200 bg-white p-5 dark:border-red-950 dark:bg-zinc-950">
-        <h2 className="text-sm font-semibold text-red-700 dark:text-red-400">Zona de perigo</h2>
-        <p className="mt-1 text-xs text-zinc-500">
-          Apagar a carteira apaga TODOS os alvos, ligações, reuniões e histórico dela — sem volta. As empresas são
-          globais e continuam cadastradas. Pra só tirar de circulação, use o status <strong>arquivada</strong> acima.
-        </p>
-        <form action={deleteCampaign.bind(null, campaign.id)} className="mt-3">
-          <ConfirmButton
-            message={`Apagar a carteira "${campaign.name}" e TODO o histórico dela (alvos, ligações, reuniões)? Não tem volta.`}
-            className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
-          >
-            Apagar carteira
-          </ConfirmButton>
-        </form>
-      </div>
+      {/* zona de perigo — apagar carteira é do admin */}
+      {isAdmin(access) && (
+        <div className="rounded-xl border border-red-200 bg-white p-5 dark:border-red-950 dark:bg-zinc-950">
+          <h2 className="text-sm font-semibold text-red-700 dark:text-red-400">Zona de perigo</h2>
+          <p className="mt-1 text-xs text-zinc-500">
+            Apagar a carteira apaga TODOS os alvos, ligações, reuniões e histórico dela — sem volta. As empresas são
+            globais e continuam cadastradas. Pra só tirar de circulação, use o status <strong>arquivada</strong> acima.
+          </p>
+          <form action={deleteCampaign.bind(null, campaign.id)} className="mt-3">
+            <ConfirmButton
+              message={`Apagar a carteira "${campaign.name}" e TODO o histórico dela (alvos, ligações, reuniões)? Não tem volta.`}
+              className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
+            >
+              Apagar carteira
+            </ConfirmButton>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

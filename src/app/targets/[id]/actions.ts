@@ -1,14 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireUser } from "@/auth/dal";
+import { assertTarget } from "@/auth/access";
 import { getDb } from "@/db";
 import { recordCall } from "@/core/log-call";
 import { parseCallForm } from "@/lib/call-form";
 
 export async function logCall(targetId: string, formData: FormData) {
-  await requireUser();
-  await recordCall(getDb(), targetId, parseCallForm(formData));
+  const { access } = await assertTarget(targetId);
+  await recordCall(getDb(), targetId, parseCallForm(formData), access.id);
 
   revalidatePath(`/targets/${targetId}`);
   revalidatePath("/", "layout");

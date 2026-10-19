@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireUser } from "@/auth/dal";
+import { getAccess, isAdmin, podeVerCarteira } from "@/auth/access";
 import { getScriptGraph, getTargetDetail } from "@/db/queries";
 import { StageBadge } from "@/components/StageBadge";
 import { CallLogForm } from "@/components/CallLogForm";
@@ -31,10 +31,11 @@ import { activityType, mentalState, objectionType, objectiveHit } from "@/db/sch
 export const dynamic = "force-dynamic";
 
 export default async function TargetDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireUser();
+  const access = await getAccess();
+  const admin = isAdmin(access);
   const { id } = await params;
   const t = await getTargetDetail(id);
-  if (!t) notFound();
+  if (!t || !podeVerCarteira(access, t.campaignId)) notFound();
 
   // o fluxo da carteira (grafo do script) — aba 🌳 do painel de discagem
   const graph = await getScriptGraph(t.campaignId);
@@ -125,7 +126,7 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
             nextActionPretext={t.nextActionPretext}
           />
 
-          <CompanySection co={co} />
+          <CompanySection co={co} admin={admin} />
 
           <ContactsSection companyId={co.id} contacts={co.contacts} />
 
@@ -139,10 +140,11 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
             archived={Boolean(t.archivedAt)}
             stageOptions={stageOptions}
             mentalOptions={mentalOptions}
+            admin={admin}
           />
 
           <Card title={`Histórico (${t.activities.length})`}>
-            <ActivityHistory activities={t.activities} />
+            <ActivityHistory activities={t.activities} meId={access.id} admin={admin} />
           </Card>
         </div>
 

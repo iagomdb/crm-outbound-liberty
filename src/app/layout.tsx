@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { getSessionUser } from "@/auth/dal";
+import { getAccess, isAdmin } from "@/auth/access";
 import { LogoutButton } from "@/components/LogoutButton";
 import { ContaSwitcher } from "@/components/ContaSwitcher";
 import { getContas } from "@/db/queries";
@@ -24,8 +25,13 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   // só pra montar o header (nome + Sair); a proteção das rotas é do proxy + DAL,
   // não do layout (layout não re-renderiza a cada navegação)
   const user = await getSessionUser();
-  // seletor de conta só faz sentido logado (e evita bater no banco no /login)
-  const [contas, contaAtiva] = user ? await Promise.all([getContas(), getContaAtiva()]) : [[], null];
+  const access = user ? await getAccess() : null;
+  const admin = access ? isAdmin(access) : false;
+  // seletor de conta só faz sentido logado (e evita bater no banco no /login);
+  // operador só vê as contas das carteiras liberadas pra ele
+  const [contas, contaAtiva] = access
+    ? await Promise.all([getContas(access.campaignIds), getContaAtiva()])
+    : [[], null];
 
   return (
     <html lang="pt-BR" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
@@ -54,19 +60,25 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                   <Link href="/hipoteses" className={navLink}>
                     Hipóteses
                   </Link>
-                  <Link href="/templates" className={navLink}>
-                    Templates
-                  </Link>
+                  {admin && (
+                    <Link href="/templates" className={navLink}>
+                      Templates
+                    </Link>
+                  )}
                 </>
               )}
             </div>
             <div className="flex items-center gap-4 text-sm">
               {user ? (
                 <>
-                  <Link href="/usuarios" className={navLink}>
-                    Usuários
+                  {admin && (
+                    <Link href="/usuarios" className={navLink}>
+                      Usuários
+                    </Link>
+                  )}
+                  <Link href={`/usuarios/${user.id}`} title="minha conta (trocar senha)" className="text-zinc-400 hover:underline">
+                    {user.name}
                   </Link>
-                  <span className="text-zinc-400">{user.name}</span>
                   <LogoutButton />
                 </>
               ) : (

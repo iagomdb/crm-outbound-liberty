@@ -50,6 +50,23 @@ npm run import -- <arquivo>   # importa lista de empresas (consultas.plus .xlsx)
 > a 5432 fica pro Postgres local), lendo `DATABASE_URL` do `.env`. Precisam do
 > `docker compose up` rodando.
 
+## Usuários e carteiras compartilhadas
+
+Dois papéis (`src/auth/access.ts`):
+
+- **admin** — vê todas as carteiras; gerencia usuários, cria/apaga carteira, importa, exclui.
+- **operador** — só vê as carteiras liberadas pra ele. Liga, tria, arquiva e edita o
+  script/fluxo delas; apaga só as ligações que ele mesmo registrou.
+
+Compartilhar uma carteira: **Usuários → Novo usuário** (nasce operador) → na tela dele,
+**Carteiras compartilhadas** → marcar. Vale na próxima tela que ele abrir. Cada ligação
+grava quem registrou; o quadro **Quem está ligando** na carteira mostra o ritmo de cada um.
+
+```bash
+npm run auth:create-user -- email@dominio.com "Nome" --admin   # admin pela linha de comando
+npm run auth:create-user -- email@dominio.com --reset-password --admin   # destrava admin perdido
+```
+
 ## Estrutura
 
 ```

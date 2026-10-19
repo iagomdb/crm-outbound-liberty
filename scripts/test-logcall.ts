@@ -51,7 +51,7 @@ async function main() {
     tipoCobranca: "cobranca_interna",
     faixaClientes: null,
     portePercebido: null,
-  });
+  }, null);
   const [after1] = await db.select().from(targets).where(eq(targets.id, t.id));
   assert(after1.attempts === before.attempts + 1, `attempts ${before.attempts} → ${after1.attempts}`);
   assert(after1.stage === "conversa", `estágio virou "conversa" (${after1.stage})`);
@@ -93,7 +93,7 @@ async function main() {
     tipoCobranca: null,
     faixaClientes: null,
     portePercebido: null,
-  });
+  }, null);
   const [after2] = await db.select().from(targets).where(eq(targets.id, t.id));
   assert(after2.stage === "reuniao_agendada", `estágio = reuniao_agendada (${after2.stage})`);
   assert(after2.qualified === true, "qualified marcado");

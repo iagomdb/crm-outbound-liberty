@@ -1,14 +1,13 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { requireUser } from "@/auth/dal";
-import { getCampaignBySlug, getFunnelMetrics, getQueue, getTriagemCount } from "@/db/queries";
+import { getAccess, getCarteiraOu404, isAdmin } from "@/auth/access";
+import { getFunnelMetrics, getQueue, getStatsPorPessoa, getTriagemCount } from "@/db/queries";
 import { KanbanBoard, type BoardColumn, type BoardItem } from "@/components/KanbanBoard";
 import { Card, Badge, ButtonLink, type BadgeTone } from "@/components/ui";
 import { moveTarget, archiveTarget } from "./actions";
 import { goldenHourLabel } from "@/core/golden-hours";
 import { funnelRates, pct } from "@/core/funnel";
 import { ACTIVE_STAGES, STAGE_LABELS } from "@/core/pipeline";
-import { fmtCnpj, fmtPhone } from "@/lib/format";
+import { fmtCnpj, fmtDateTime, fmtPhone } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -37,15 +36,14 @@ function Arrow({ rate }: { rate: string }) {
 }
 
 export default async function CampaignBoard({ params }: { params: Promise<{ slug: string }> }) {
-  await requireUser();
   const { slug } = await params;
-  const campaign = await getCampaignBySlug(slug);
-  if (!campaign) notFound();
+  const [campaign, access] = await Promise.all([getCarteiraOu404(slug), getAccess()]);
 
-  const [items, metrics, triagemPendente] = await Promise.all([
+  const [items, metrics, triagemPendente, porPessoa] = await Promise.all([
     getQueue(campaign.id),
     getFunnelMetrics(campaign.id),
     getTriagemCount(campaign.id),
+    getStatsPorPessoa(campaign.id),
   ]);
   const r = funnelRates(metrics);
   const gh = GH_UI[goldenHourLabel()];
@@ -114,10 +112,12 @@ export default async function CampaignBoard({ params }: { params: Promise<{ slug
           <ButtonLink href={`/campaigns/${slug}/editar`} size="sm" variant="ghost">
             editar
           </ButtonLink>
-          {/* ação de criação — primária */}
-          <ButtonLink href={`/companies/new?campaign=${slug}`} size="sm" variant="primary">
-            + empresa
-          </ButtonLink>
+          {/* ação de criação — primária. Entrada de dados é do admin (como o import) */}
+          {isAdmin(access) && (
+            <ButtonLink href={`/companies/new?campaign=${slug}`} size="sm" variant="primary">
+              + empresa
+            </ButtonLink>
+          )}
         </div>
       </div>
 
@@ -140,6 +140,45 @@ export default async function CampaignBoard({ params }: { params: Promise<{ slug
           <Tile label="Reuniões" value={metrics.reunioes} />
         </div>
       </Card>
+
+      {/* quem está ligando — carteira compartilhada: cada um vê o ritmo do outro */}
+      {porPessoa.length > 0 && (
+        <Card title="Quem está ligando">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm tabular-nums">
+              <thead>
+                <tr className="border-b border-zinc-100 text-left text-xs text-zinc-500 dark:border-zinc-900">
+                  <th className="py-1.5 pr-3 font-medium">Pessoa</th>
+                  <th className="py-1.5 pr-3 font-medium">Discadas hoje</th>
+                  <th className="py-1.5 pr-3 font-medium">Conversas hoje</th>
+                  <th className="py-1.5 pr-3 font-medium">Discadas</th>
+                  <th className="py-1.5 pr-3 font-medium">Conversas</th>
+                  <th className="py-1.5 pr-3 font-medium">Reuniões</th>
+                  <th className="py-1.5 font-medium">Última atividade</th>
+                </tr>
+              </thead>
+              <tbody>
+                {porPessoa.map((p) => (
+                  <tr key={p.userId ?? "sem-autor"} className="border-b border-zinc-100 last:border-0 dark:border-zinc-900">
+                    <td className="py-1.5 pr-3">
+                      {p.nome ?? <span className="text-zinc-400">usuário removido</span>}
+                      {p.userId === access.id && <span className="ml-1.5 text-xs text-zinc-400">(você)</span>}
+                    </td>
+                    <td className="py-1.5 pr-3 font-medium">{p.discadasHoje}</td>
+                    <td className="py-1.5 pr-3 font-medium">{p.conversasHoje}</td>
+                    <td className="py-1.5 pr-3">{p.discadas}</td>
+                    <td className="py-1.5 pr-3">
+                      {p.conversas} <span className="text-xs text-zinc-400">({pct(p.discadas ? p.conversas / p.discadas : 0)})</span>
+                    </td>
+                    <td className="py-1.5 pr-3">{p.reunioes}</td>
+                    <td className="py-1.5 text-xs text-zinc-500">{fmtDateTime(p.ultima)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {/* kanban */}
       {items.length === 0 ? (

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/auth/dal";
+import { assertTarget } from "@/auth/access";
 import { getDb } from "@/db";
 import { sendTargetEmail } from "@/email/send";
 
@@ -11,7 +11,7 @@ export type SendState = { error: string } | undefined;
 const s = (v: FormDataEntryValue | null) => String(v ?? "").trim();
 
 export async function sendEmail(targetId: string, back: string, _prev: SendState, fd: FormData): Promise<SendState> {
-  await requireUser();
+  const { access } = await assertTarget(targetId);
 
   const to = s(fd.get("to"));
   const subject = s(fd.get("subject"));
@@ -23,7 +23,7 @@ export async function sendEmail(targetId: string, back: string, _prev: SendState
   if (!body) return { error: "Corpo vazio." };
 
   try {
-    await sendTargetEmail(getDb(), { targetId, contactId, to, subject, body });
+    await sendTargetEmail(getDb(), { targetId, contactId, userId: access.id, to, subject, body });
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Falha ao enviar." };
   }

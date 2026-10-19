@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireUser } from "@/auth/dal";
+import { getAccess, getEscopo, isAdmin, podeVerCarteira } from "@/auth/access";
 import { getNextInQueue, getScriptGraph, getTargetDetail, getTodayStats } from "@/db/queries";
-import { getContaAtiva } from "@/lib/conta-server";
 import { StageBadge } from "@/components/StageBadge";
 import { CallLogForm } from "@/components/CallLogForm";
 import { ActivityHistory } from "@/components/ActivityHistory";
@@ -48,18 +47,18 @@ export default async function TaskPage({
   params: Promise<{ targetId: string }>;
   searchParams: Promise<{ roleta?: string }>;
 }) {
-  await requireUser();
+  const [access, escopo] = await Promise.all([getAccess(), getEscopo()]);
+  const admin = isAdmin(access);
   const { targetId } = await params;
   const { roleta } = await searchParams;
   // modo roleta: veio de /roleta — a "próxima" é sorteada nas carteiras marcadas
   const roletaSlugs = roleta ? roleta.split(",").filter(Boolean) : null;
-  const conta = await getContaAtiva();
   const [t, nextId, hoje] = await Promise.all([
     getTargetDetail(targetId),
-    getNextInQueue(targetId, conta),
-    getTodayStats(conta),
+    getNextInQueue(targetId, escopo),
+    getTodayStats(escopo),
   ]);
-  if (!t) notFound();
+  if (!t || !podeVerCarteira(access, t.campaignId)) notFound();
 
   // o fluxo da carteira (grafo do script) — aba 🌳 do painel de discagem
   const graph = await getScriptGraph(t.campaignId);
@@ -300,6 +299,7 @@ export default async function TaskPage({
               <dl className="flex flex-col gap-2 text-sm">
                 <div className="flex gap-2 text-xs text-zinc-400">
                   <span>{fmtDateTime(lastCall.occurredAt)}</span>
+                  {lastCall.user && <span>por {lastCall.user.id === access.id ? "você" : lastCall.user.name}</span>}
                   <span>{lastCall.reachedHuman ? "falou com humano" : "não atendeu / não passou"}</span>
                   {lastCall.contact?.nome && <span>com {lastCall.contact.nome}</span>}
                 </div>
@@ -337,7 +337,7 @@ export default async function TaskPage({
 
           <ContactsSection companyId={co.id} contacts={co.contacts} />
 
-          <CompanySection co={co} />
+          <CompanySection co={co} admin={admin} />
 
           <ScheduleReturnSection
             targetId={t.id}
@@ -356,11 +356,12 @@ export default async function TaskPage({
             archived={Boolean(t.archivedAt)}
             stageOptions={stageOptions}
             mentalOptions={mentalOptions}
+            admin={admin}
           />
 
           {/* histórico: uma linha por ligação, clique expande o registro completo */}
           <Card title={`Histórico (${t.activities.length})`}>
-            <ActivityHistory activities={t.activities} />
+            <ActivityHistory activities={t.activities} meId={access.id} admin={admin} />
           </Card>
         </div>
 

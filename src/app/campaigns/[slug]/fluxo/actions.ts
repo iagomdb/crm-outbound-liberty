@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { and, eq, sql } from "drizzle-orm";
-import { requireUser } from "@/auth/dal";
+import { assertFluxo } from "@/auth/access";
 import { getDb } from "@/db";
 import { scriptGroupOptions, scriptGroups, scriptNodes } from "@/db/schema";
 import type { NodeKind } from "@/core/script-flow";
@@ -17,6 +17,9 @@ import {
 // Edição do FLUXO em MENUS. Uma operação por action: o canvas é otimista na
 // posição (arrastar não pode piscar), mas todo o resto volta renderizado no
 // mesmo roundtrip via revalidatePath.
+//
+// Toda action passa por assertFluxo com TODOS os ids que recebe: menus e
+// opções têm que ser da mesma carteira, e ela tem que ser do usuário.
 
 const s = (v: FormDataEntryValue | null) => (typeof v === "string" ? v.trim() : "");
 const kind = (v: FormDataEntryValue | null): NodeKind => {
@@ -38,7 +41,7 @@ export async function criarMenu(
   _prev: CriarState,
   fd: FormData,
 ): Promise<CriarState> {
-  await requireUser();
+  await assertFluxo({ campaignId });
   const db = getDb();
   const nome = s(fd.get("nome")) || "Novo menu";
   const [menu] = await db
@@ -58,7 +61,7 @@ export async function criarMenu(
 }
 
 export async function renomearMenu(menuId: string, fd: FormData) {
-  await requireUser();
+  await assertFluxo({ menuIds: [menuId] });
   const nome = s(fd.get("nome"));
   if (!nome) return;
   await getDb().update(scriptGroups).set({ nome, updatedAt: new Date() }).where(eq(scriptGroups.id, menuId));
@@ -67,14 +70,14 @@ export async function renomearMenu(menuId: string, fd: FormData) {
 
 /** Apaga o menu. As opções dentro dele continuam existindo (viram soltas). */
 export async function apagarMenu(menuId: string) {
-  await requireUser();
+  await assertFluxo({ menuIds: [menuId] });
   await getDb().delete(scriptGroups).where(eq(scriptGroups.id, menuId));
   refresh();
 }
 
 /** Posição no canvas. Sem revalidate: arrastar não pode re-renderizar a tela. */
 export async function moverMenu(menuId: string, posX: number, posY: number) {
-  await requireUser();
+  await assertFluxo({ menuIds: [menuId] });
   await getDb()
     .update(scriptGroups)
     .set({ posX: Math.round(posX), posY: Math.round(posY) })
@@ -83,7 +86,7 @@ export async function moverMenu(menuId: string, posX: number, posY: number) {
 
 /** O "Default" do card: destino de toda opção que não tem o seu. */
 export async function definirPadrao(menuId: string, destinoId: string | null) {
-  await requireUser();
+  await assertFluxo({ menuIds: [menuId, destinoId] });
   if (destinoId === menuId) return; // auto-laço no padrão trava a conversa
   await getDb()
     .update(scriptGroups)
@@ -93,13 +96,13 @@ export async function definirPadrao(menuId: string, destinoId: string | null) {
 }
 
 export async function definirEntradaMenu(campaignId: string, menuId: string) {
-  await requireUser();
+  await assertFluxo({ campaignId, menuIds: [menuId] });
   await definirEntrada(getDb(), campaignId, menuId);
   refresh();
 }
 
 export async function duplicarMenuAction(menuId: string) {
-  await requireUser();
+  await assertFluxo({ menuIds: [menuId] });
   await duplicarMenu(getDb(), menuId);
   refresh();
 }
@@ -113,7 +116,7 @@ export async function criarOpcao(
   _prev: CriarState,
   fd: FormData,
 ): Promise<CriarState> {
-  await requireUser();
+  await assertFluxo({ campaignId, menuIds: [menuId] });
   const titulo = s(fd.get("titulo"));
   if (!titulo) return { erro: "título obrigatório" };
 
@@ -131,7 +134,7 @@ export async function criarOpcao(
 }
 
 export async function atualizarOpcao(opcaoId: string, fd: FormData) {
-  await requireUser();
+  await assertFluxo({ opcaoIds: [opcaoId] });
   const titulo = s(fd.get("titulo"));
   if (!titulo) throw new Error("título obrigatório");
   await getDb()
@@ -149,14 +152,14 @@ export async function atualizarOpcao(opcaoId: string, fd: FormData) {
 
 /** Apaga a opção de vez — some de todos os menus onde aparecia. */
 export async function apagarOpcao(opcaoId: string) {
-  await requireUser();
+  await assertFluxo({ opcaoIds: [opcaoId] });
   await getDb().delete(scriptNodes).where(eq(scriptNodes.id, opcaoId));
   refresh();
 }
 
 /** Tira a opção SÓ deste menu. Ela continua existindo nos outros. */
 export async function removerDoMenu(menuId: string, opcaoId: string) {
-  await requireUser();
+  await assertFluxo({ menuIds: [menuId], opcaoIds: [opcaoId] });
   await getDb()
     .delete(scriptGroupOptions)
     .where(and(eq(scriptGroupOptions.groupId, menuId), eq(scriptGroupOptions.nodeId, opcaoId)));
@@ -165,8 +168,8 @@ export async function removerDoMenu(menuId: string, opcaoId: string) {
 
 /** Reusa uma opção que já existe neste menu — a MESMA opção, não uma cópia. */
 export async function adicionarExistente(menuId: string, opcaoId: string) {
-  await requireUser();
   if (!opcaoId) return;
+  await assertFluxo({ menuIds: [menuId], opcaoIds: [opcaoId] });
   const db = getDb();
   const [ja] = await db
     .select({ id: scriptGroupOptions.id })
@@ -184,7 +187,7 @@ export async function adicionarExistente(menuId: string, opcaoId: string) {
  * null volta a seguir o padrão.
  */
 export async function definirDestinoOpcao(opcaoId: string, destinoId: string | null) {
-  await requireUser();
+  await assertFluxo({ opcaoIds: [opcaoId], menuIds: [destinoId] });
   await getDb()
     .update(scriptNodes)
     .set({ proximoId: destinoId, updatedAt: new Date() })
@@ -194,7 +197,7 @@ export async function definirDestinoOpcao(opcaoId: string, destinoId: string | n
 
 /** Sobe/desce a opção dentro do menu. A posição é do menu, não da opção. */
 export async function moverOpcao(menuId: string, opcaoId: string, dir: -1 | 1) {
-  await requireUser();
+  await assertFluxo({ menuIds: [menuId], opcaoIds: [opcaoId] });
   const db = getDb();
   const irmas = await db
     .select({ id: scriptGroupOptions.id, nodeId: scriptGroupOptions.nodeId })
@@ -214,20 +217,20 @@ export async function moverOpcao(menuId: string, opcaoId: string, dir: -1 | 1) {
 }
 
 export async function duplicarOpcaoAction(menuId: string, opcaoId: string) {
-  await requireUser();
+  await assertFluxo({ menuIds: [menuId], opcaoIds: [opcaoId] });
   await duplicarOpcao(getDb(), menuId, opcaoId);
   refresh();
 }
 
 export async function fundirOpcaoAction(manterId: string, absorvidoId: string) {
-  await requireUser();
+  await assertFluxo({ opcaoIds: [manterId, absorvidoId] });
   await fundirOpcoes(getDb(), manterId, absorvidoId);
   refresh();
 }
 
 /** Apaga o fluxo inteiro da carteira (zona de perigo). */
 export async function limparFluxo(campaignId: string) {
-  await requireUser();
+  await assertFluxo({ campaignId });
   const db = getDb();
   await db.delete(scriptGroups).where(eq(scriptGroups.campaignId, campaignId));
   await db.delete(scriptNodes).where(eq(scriptNodes.campaignId, campaignId));

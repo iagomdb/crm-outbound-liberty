@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { requireUser } from "@/auth/dal";
+import { getEscopo } from "@/auth/access";
 import { getAgenda } from "@/db/queries";
-import { getContaAtiva } from "@/lib/conta-server";
 import { BUCKET_CLASSES, BUCKET_LABELS, BUCKET_ORDER, bucketFor, type Bucket } from "@/core/agenda";
 import { completeReturn, snoozeReturn } from "./actions";
 import { fmtDateTime } from "@/lib/format";
@@ -16,8 +15,7 @@ const snoozeBtn =
 const openBtn = "rounded bg-emerald-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-emerald-700";
 
 export default async function AgendaPage() {
-  await requireUser();
-  const items = await getAgenda(await getContaAtiva());
+  const items = await getAgenda(await getEscopo());
   const now = new Date();
   const groups: Record<Bucket, typeof items> = { atrasada: [], hoje: [], amanha: [], semana: [], depois: [] };
   for (const t of items) {

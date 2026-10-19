@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { requireUser } from "@/auth/dal";
+import { getEscopo } from "@/auth/access";
 import { getIcpRawData } from "@/db/queries";
-import { getContaAtiva } from "@/lib/conta-server";
 import { OBJECTION_LABELS } from "@/core/pipeline";
 import {
   HYPOTHESIS_UI,
@@ -34,8 +33,7 @@ const heat = (n: number, max: number) => {
 };
 
 export default async function IcpPage() {
-  await requireUser();
-  const { camps, rawTargets, rawCalls, rawMeetings } = await getIcpRawData(await getContaAtiva());
+  const { camps, rawTargets, rawCalls, rawMeetings } = await getIcpRawData(await getEscopo());
 
   const withData = camps.filter((c) => rawTargets.some((t) => t.campaignId === c.id));
   const stats = new Map<string, IcpCampaignStats>(

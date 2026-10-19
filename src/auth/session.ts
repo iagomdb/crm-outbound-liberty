@@ -16,7 +16,8 @@ import { SESSION_COOKIE } from "./cookie";
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias, expiração absoluta
 
-export type SessionUser = { id: string; email: string; name: string };
+export type UserRole = (typeof users.$inferSelect)["role"];
+export type SessionUser = { id: string; email: string; name: string; role: UserRole };
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -59,6 +60,7 @@ export async function validateSessionToken(token: string): Promise<SessionUser |
       userId: users.id,
       email: users.email,
       name: users.name,
+      role: users.role,
     })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
@@ -69,7 +71,7 @@ export async function validateSessionToken(token: string): Promise<SessionUser |
     await db.delete(sessions).where(eq(sessions.id, row.sessionId));
     return null;
   }
-  return { id: row.userId, email: row.email, name: row.name };
+  return { id: row.userId, email: row.email, name: row.name, role: row.role };
 }
 
 /** Apaga a sessão atual (linha no banco + cookie). */

@@ -23,8 +23,10 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
  * Histórico de ligações: resumo em uma linha, clique expande o registro
  * completo (resultado, travou em, objeção, hipótese, notas, task gerada).
  * <details> nativo — funciona em server component, sem JS.
+ * Carteira compartilhada: cada linha diz QUEM registrou; apagar é do admin ou
+ * de quem registrou (a action confere de novo — aqui só some o botão).
  */
-export function ActivityHistory({ activities }: { activities: Activity[] }) {
+export function ActivityHistory({ activities, meId, admin }: { activities: Activity[]; meId: string; admin: boolean }) {
   if (activities.length === 0) {
     return <p className="text-sm text-zinc-500">Sem ligações registradas.</p>;
   }
@@ -36,6 +38,7 @@ export function ActivityHistory({ activities }: { activities: Activity[] }) {
             <summary className="flex cursor-pointer flex-wrap items-center gap-2 py-2 text-xs [&::-webkit-details-marker]:hidden">
               <span className="text-zinc-300 transition-transform group-open:rotate-90 dark:text-zinc-600">▶</span>
               <span className="text-zinc-400">{fmtDateTime(a.occurredAt)}</span>
+              {a.user && <span className="text-zinc-500">{a.user.id === meId ? "você" : a.user.name}</span>}
               {a.reachedHuman ? (
                 <span className="rounded bg-sky-100 px-1.5 py-0.5 font-medium text-sky-700 dark:bg-sky-950 dark:text-sky-300">conversa</span>
               ) : (
@@ -120,14 +123,16 @@ export function ActivityHistory({ activities }: { activities: Activity[] }) {
                   </Button>
                 </form>
               </details>
-              <form action={deleteActivity.bind(null, a.id)}>
-                <ConfirmButton
-                  message="Apagar esta ligação do histórico? A tentativa é devolvida ao alvo e a reunião gerada por ela (se houver) some. Não tem volta."
-                  className="text-xs text-red-500 hover:underline"
-                >
-                  apagar ligação
-                </ConfirmButton>
-              </form>
+              {(admin || a.userId === meId) && (
+                <form action={deleteActivity.bind(null, a.id)}>
+                  <ConfirmButton
+                    message="Apagar esta ligação do histórico? A tentativa é devolvida ao alvo e a reunião gerada por ela (se houver) some. Não tem volta."
+                    className="text-xs text-red-500 hover:underline"
+                  >
+                    apagar ligação
+                  </ConfirmButton>
+                </form>
+              )}
             </div>
           </details>
         </li>

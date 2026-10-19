@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { requireUser } from "@/auth/dal";
-import { getAprendizado, getCaminhoRows, getCampaignBySlug, getFunnelMetrics, getScriptGraph } from "@/db/queries";
+import { getCarteiraOu404 } from "@/auth/access";
+import { getAprendizado, getCaminhoRows, getFunnelMetrics, getScriptGraph } from "@/db/queries";
 import { OBJECTION_LABELS } from "@/core/pipeline";
 import { KIND_CLASSES, statsDeAbertura, statsPorNo, type NodeKind, type NodeStat } from "@/core/script-flow";
 
@@ -41,10 +40,8 @@ function StatRow({ stat }: { stat: NodeStat }) {
  * dado, não com impressão.
  */
 export default async function AprendizadoPage({ params }: { params: Promise<{ slug: string }> }) {
-  await requireUser();
   const { slug } = await params;
-  const campaign = await getCampaignBySlug(slug);
-  if (!campaign) notFound();
+  const campaign = await getCarteiraOu404(slug);
 
   const [{ perdas, objecoes, frases }, metrics, caminhos, graph] = await Promise.all([
     getAprendizado(campaign.id),

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { eq, sql } from "drizzle-orm";
-import { requireUser } from "@/auth/dal";
+import { assertActivity, assertCompany, assertContact, assertTarget, isAdmin, requireAdmin } from "@/auth/access";
 import { getDb } from "@/db";
 import { activities, campaigns, companies, contacts, meetings, targets } from "@/db/schema";
 import type { Stage } from "@/core/pipeline";
@@ -14,7 +14,7 @@ const on = (v: FormDataEntryValue | null) => v === "on" || v === "true";
 
 // -------------------------------------------------- contatos
 export async function createContact(companyId: string, fd: FormData) {
-  await requireUser();
+  await assertCompany(companyId);
   const db = getDb();
   await db.insert(contacts).values({
     companyId,
@@ -30,7 +30,7 @@ export async function createContact(companyId: string, fd: FormData) {
 }
 
 export async function updateContact(contactId: string, fd: FormData) {
-  await requireUser();
+  await assertContact(contactId);
   const db = getDb();
   await db
     .update(contacts)
@@ -49,7 +49,7 @@ export async function updateContact(contactId: string, fd: FormData) {
 }
 
 export async function deleteContact(contactId: string) {
-  await requireUser();
+  await assertContact(contactId);
   const db = getDb();
   await db.delete(contacts).where(eq(contacts.id, contactId));
   revalidatePath("/", "layout");
@@ -57,7 +57,7 @@ export async function deleteContact(contactId: string) {
 
 // -------------------------------------------------- alvo
 export async function updateTarget(targetId: string, fd: FormData) {
-  await requireUser();
+  await assertTarget(targetId);
   const db = getDb();
   const stage = s(fd.get("stage"));
   const mental = s(fd.get("mentalState"));
@@ -79,7 +79,7 @@ export async function updateTarget(targetId: string, fd: FormData) {
 }
 
 export async function archiveTargetDetail(targetId: string, fd: FormData) {
-  await requireUser();
+  await assertTarget(targetId);
   const db = getDb();
   await db
     .update(targets)
@@ -89,7 +89,7 @@ export async function archiveTargetDetail(targetId: string, fd: FormData) {
 }
 
 export async function unarchiveTarget(targetId: string) {
-  await requireUser();
+  await assertTarget(targetId);
   const db = getDb();
   await db
     .update(targets)
@@ -98,9 +98,9 @@ export async function unarchiveTarget(targetId: string) {
   revalidatePath("/", "layout");
 }
 
-/** Apaga o alvo da carteira — leva junto ligações/reuniões dele. A empresa fica cadastrada. */
+/** Apaga o alvo da carteira — leva junto ligações/reuniões dele. A empresa fica cadastrada. Só admin. */
 export async function deleteTarget(targetId: string) {
-  await requireUser();
+  await requireAdmin();
   const db = getDb();
   const [t] = await db
     .select({ slug: campaigns.slug })
@@ -115,7 +115,7 @@ export async function deleteTarget(targetId: string) {
 // -------------------------------------------------- atividades (ligações)
 /** Corrige os textos de uma ligação já registrada (resultado, travou em, notas). */
 export async function updateActivity(activityId: string, fd: FormData) {
-  await requireUser();
+  await assertActivity(activityId);
   const db = getDb();
   await db
     .update(activities)
@@ -132,9 +132,11 @@ export async function updateActivity(activityId: string, fd: FormData) {
  * Apaga uma ligação registrada errado: devolve a tentativa ao alvo e remove a
  * reunião que ela tiver gerado. Estágio/estado mental não são recalculados —
  * se a ligação errada moveu o funil, ajuste no card "Alvo".
+ * Operador só apaga as ligações que ELE registrou; admin apaga qualquer uma.
  */
 export async function deleteActivity(activityId: string) {
-  await requireUser();
+  const { access, autorId } = await assertActivity(activityId);
+  if (!isAdmin(access) && autorId !== access.id) throw new Error("só dá pra apagar ligação registrada por você");
   const db = getDb();
   const [act] = await db
     .select({ targetId: activities.targetId })
@@ -152,7 +154,7 @@ export async function deleteActivity(activityId: string) {
 
 // -------------------------------------------------- empresa
 export async function updateCompany(companyId: string, fd: FormData) {
-  await requireUser();
+  await assertCompany(companyId);
   const db = getDb();
   const razao = s(fd.get("razaoSocial"));
   await db
@@ -173,9 +175,9 @@ export async function updateCompany(companyId: string, fd: FormData) {
   revalidatePath("/", "layout");
 }
 
-/** Apaga a empresa do CRM inteiro — contatos e alvos dela em TODAS as carteiras vão junto. */
+/** Apaga a empresa do CRM inteiro — contatos e alvos dela em TODAS as carteiras vão junto. Só admin. */
 export async function deleteCompany(companyId: string) {
-  await requireUser();
+  await requireAdmin();
   const db = getDb();
   await db.delete(companies).where(eq(companies.id, companyId));
   revalidatePath("/", "layout");

@@ -48,9 +48,10 @@ export type CallInput = {
  * o estágio seja forçado) e registra a reunião se o objetivo #1 foi batido.
  * Aplica a REGRA DE OURO (core/tasks.ts): estágio não-terminal ⇒ task
  * obrigatória; terminal ⇒ task limpa; `nao_agora` ⇒ reentra com task longa.
+ * `userId` = quem ligou (null só em script/teste fora do app).
  * Função pura (recebe o db) — testável fora do Next.
  */
-export async function recordCall(db: DB, targetId: string, input: CallInput) {
+export async function recordCall(db: DB, targetId: string, input: CallInput, userId: string | null) {
   const now = input.now ?? new Date();
 
   const [cur] = await db
@@ -97,6 +98,7 @@ export async function recordCall(db: DB, targetId: string, input: CallInput) {
     .values({
       targetId,
       contactId: input.contactId,
+      userId,
       type: input.type,
       occurredAt: now,
       reachedHuman: input.reachedHuman,

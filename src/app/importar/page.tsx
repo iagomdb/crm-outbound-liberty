@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireUser } from "@/auth/dal";
+import { requireAdminPage } from "@/auth/access";
 import { Field, fieldClasses } from "@/components/ui";
 import { PendingButton } from "@/components/PendingButton";
 import { uploadSheet } from "./actions";
@@ -7,7 +7,7 @@ import { uploadSheet } from "./actions";
 export const dynamic = "force-dynamic";
 
 export default async function ImportarPage({ searchParams }: { searchParams: Promise<{ err?: string }> }) {
-  await requireUser();
+  await requireAdminPage();
   const { err } = await searchParams;
 
   return (

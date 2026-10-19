@@ -3,16 +3,16 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
-import { requireUser } from "@/auth/dal";
+import { requireAdmin } from "@/auth/access";
 import { getDb } from "@/db";
 import { campaigns, companies, targets } from "@/db/schema";
 
 const s = (v: FormDataEntryValue | null) => (typeof v === "string" ? v.trim() : "");
 const digits = (v: FormDataEntryValue | null) => s(v).replace(/\D/g, "");
 
-/** Cria (ou atualiza) uma empresa manualmente e, opcionalmente, cria o alvo na campanha. */
+/** Cria (ou atualiza) uma empresa manualmente e, opcionalmente, cria o alvo na campanha. Só admin. */
 export async function createCompany(fd: FormData) {
-  await requireUser();
+  await requireAdmin();
   const db = getDb();
   const cnpj = digits(fd.get("cnpj"));
   const razaoSocial = s(fd.get("razaoSocial"));

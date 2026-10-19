@@ -8,8 +8,12 @@ import { users } from "../src/db/schema";
 // Não há cadastro público (CRM interno) — usuário nasce por aqui.
 //
 // Uso:
-//   npm run auth:create-user -- iago@exemplo.com "Iago Bernardi"
-//   npm run auth:create-user -- iago@exemplo.com --reset-password
+//   npm run auth:create-user -- iago@exemplo.com "Iago Bernardi" --admin
+//   npm run auth:create-user -- socio@exemplo.com "Fulano"          (nasce operador)
+//   npm run auth:create-user -- iago@exemplo.com --reset-password [--admin]
+//
+// --admin: cria (ou promove, junto com --reset-password) como admin. É também a
+// porta de emergência se o último admin perder o papel.
 //
 // A senha é digitada no prompt (sem eco): não fica no histórico do shell.
 
@@ -29,12 +33,13 @@ function promptHidden(question: string): Promise<string> {
 
 async function main() {
   const reset = process.argv.includes("--reset-password");
-  const args = process.argv.slice(2).filter((a) => a !== "--reset-password");
+  const admin = process.argv.includes("--admin");
+  const args = process.argv.slice(2).filter((a) => a !== "--reset-password" && a !== "--admin");
   const email = (args[0] ?? "").trim().toLowerCase();
   const name = (args[1] ?? "").trim();
 
   if (!email.includes("@")) {
-    console.error('uso: npm run auth:create-user -- email@dominio.com "Nome Completo" [--reset-password]');
+    console.error('uso: npm run auth:create-user -- email@dominio.com "Nome Completo" [--admin] [--reset-password]');
     process.exit(1);
   }
 
@@ -67,11 +72,17 @@ async function main() {
   const passwordHash = await hashPassword(password);
 
   if (existing) {
-    await db.update(users).set({ passwordHash, active: true }).where(eq(users.id, existing.id));
-    console.log(`Senha redefinida: ${existing.name} <${email}>`);
+    await db
+      .update(users)
+      .set({ passwordHash, active: true, ...(admin ? { role: "admin" as const } : {}) })
+      .where(eq(users.id, existing.id));
+    console.log(`Senha redefinida: ${existing.name} <${email}>${admin ? " — agora admin" : ""}`);
   } else {
-    const [u] = await db.insert(users).values({ email, name, passwordHash }).returning();
-    console.log(`Usuário criado: ${u.name} <${u.email}> (${u.id})`);
+    const [u] = await db
+      .insert(users)
+      .values({ email, name, passwordHash, role: admin ? "admin" : "operador" })
+      .returning();
+    console.log(`Usuário criado: ${u.name} <${u.email}> (${u.id}) — ${u.role}`);
   }
 }
 

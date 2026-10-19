@@ -2,14 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
-import { requireUser } from "@/auth/dal";
+import { requireAdmin } from "@/auth/access";
 import { getDb } from "@/db";
 import { emailTemplates } from "@/db/schema";
 
+// templates são globais (todas as carteiras usam): só admin edita
 const s = (v: FormDataEntryValue | null) => String(v ?? "").trim();
 
 export async function createTemplate(fd: FormData) {
-  await requireUser();
+  await requireAdmin();
   const name = s(fd.get("name"));
   const subject = s(fd.get("subject"));
   const body = s(fd.get("body"));
@@ -19,7 +20,7 @@ export async function createTemplate(fd: FormData) {
 }
 
 export async function updateTemplate(id: string, fd: FormData) {
-  await requireUser();
+  await requireAdmin();
   const name = s(fd.get("name"));
   const subject = s(fd.get("subject"));
   const body = s(fd.get("body"));
@@ -32,7 +33,7 @@ export async function updateTemplate(id: string, fd: FormData) {
 }
 
 export async function deleteTemplate(id: string) {
-  await requireUser();
+  await requireAdmin();
   await getDb().delete(emailTemplates).where(eq(emailTemplates.id, id));
   revalidatePath("/templates");
 }

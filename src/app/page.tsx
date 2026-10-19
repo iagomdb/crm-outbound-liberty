@@ -1,20 +1,20 @@
 import Link from "next/link";
-import { requireUser } from "@/auth/dal";
+import { getAccess, getEscopo, isAdmin } from "@/auth/access";
 import { countCarteirasSemConta, getCampaignsWithStats, getDailyQueue, getTodayStats } from "@/db/queries";
-import { getContaAtiva } from "@/lib/conta-server";
 import { STAGE_LABELS, STAGE_ORDER, type Stage } from "@/core/pipeline";
 import { ButtonLink, Badge } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  await requireUser();
-  const conta = await getContaAtiva();
+  const [access, escopo] = await Promise.all([getAccess(), getEscopo()]);
+  const { conta } = escopo;
+  const admin = isAdmin(access);
   const [camps, stats, q, semConta] = await Promise.all([
-    getCampaignsWithStats(conta),
-    getTodayStats(conta),
-    getDailyQueue(conta),
-    countCarteirasSemConta(),
+    getCampaignsWithStats(escopo),
+    getTodayStats(escopo),
+    getDailyQueue(escopo),
+    countCarteirasSemConta(access.campaignIds),
   ]);
   const naFila = q.atrasadas.length + q.hoje.length + q.estadoZero.length;
 
@@ -56,20 +56,27 @@ export default async function Home() {
           <ButtonLink href="/roleta" size="sm" variant="secondary">
             🎲 roleta
           </ButtonLink>
-          <ButtonLink href="/importar" size="sm" variant="secondary">
-            ⬆ importar leads
-          </ButtonLink>
-          <ButtonLink href="/campaigns/new" size="sm" variant="primary">
-            + nova carteira
-          </ButtonLink>
+          {admin && (
+            <>
+              <ButtonLink href="/importar" size="sm" variant="secondary">
+                ⬆ importar leads
+              </ButtonLink>
+              <ButtonLink href="/campaigns/new" size="sm" variant="primary">
+                + nova carteira
+              </ButtonLink>
+            </>
+          )}
         </div>
       </div>
 
-      {camps.length === 0 && (
-        <p className="text-sm text-zinc-500">
-          Nenhuma campanha ainda. Rode <code className="rounded bg-zinc-200 px-1 dark:bg-zinc-800">npm run db:seed</code>.
-        </p>
-      )}
+      {camps.length === 0 &&
+        (admin ? (
+          <p className="text-sm text-zinc-500">
+            Nenhuma campanha ainda. Rode <code className="rounded bg-zinc-200 px-1 dark:bg-zinc-800">npm run db:seed</code>.
+          </p>
+        ) : (
+          <p className="text-sm text-zinc-500">Nenhuma carteira liberada pra você ainda — peça pro admin compartilhar.</p>
+        ))}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {camps.map((c) => (

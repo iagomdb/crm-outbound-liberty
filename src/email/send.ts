@@ -13,6 +13,7 @@ type DB = PostgresJsDatabase<typeof schema>;
 export type SendEmailInput = {
   targetId: string;
   contactId: string | null;
+  userId: string | null; // quem mandou
   to: string;
   subject: string;
   body: string;
@@ -35,6 +36,7 @@ export async function sendTargetEmail(db: DB, input: SendEmailInput) {
     .values({
       targetId: input.targetId,
       contactId: input.contactId,
+      userId: input.userId,
       type: "email",
       occurredAt: now,
       reachedHuman: false,

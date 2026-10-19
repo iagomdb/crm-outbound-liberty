@@ -1,4 +1,4 @@
-import { requireUser } from "@/auth/dal";
+import { requireAdminPage } from "@/auth/access";
 import { getEmailTemplates } from "@/db/queries";
 import { ConfirmButton } from "@/components/ConfirmButton";
 import { Button, Card, Field, Input, Textarea } from "@/components/ui";
@@ -31,7 +31,7 @@ function TemplateFields({ defaults }: { defaults?: { name: string; subject: stri
 
 /** CRUD de templates de e-mail — usados no “✉️ e-mail” da tela da task. */
 export default async function TemplatesPage() {
-  await requireUser();
+  await requireAdminPage();
   const templates = await getEmailTemplates();
 
   return (

@@ -16,7 +16,8 @@ function Def({ label, children, span }: { label: string; children: React.ReactNo
   );
 }
 
-export function CompanySection({ co }: { co: Company }) {
+/** `admin`: apagar a empresa do CRM inteiro (todas as carteiras) é só do admin. */
+export function CompanySection({ co, admin }: { co: Company; admin: boolean }) {
   const endereco = [co.logradouro, co.numero, co.bairro].filter(Boolean).join(", ");
   const cidade = [co.municipio, co.uf].filter(Boolean).join(" - ");
 
@@ -79,14 +80,16 @@ export function CompanySection({ co }: { co: Company }) {
             Salvar empresa
           </Button>
         </form>
-        <form action={deleteCompany.bind(null, co.id)} className="mt-2">
-          <ConfirmButton
-            message={`Apagar "${co.razaoSocial}" do CRM inteiro? Contatos e alvos dela em TODAS as carteiras vão junto. Não tem volta.`}
-            className="text-xs text-red-500 hover:underline"
-          >
-            apagar empresa do CRM
-          </ConfirmButton>
-        </form>
+        {admin && (
+          <form action={deleteCompany.bind(null, co.id)} className="mt-2">
+            <ConfirmButton
+              message={`Apagar "${co.razaoSocial}" do CRM inteiro? Contatos e alvos dela em TODAS as carteiras vão junto. Não tem volta.`}
+              className="text-xs text-red-500 hover:underline"
+            >
+              apagar empresa do CRM
+            </ConfirmButton>
+          </form>
+        )}
       </details>
     </Card>
   );

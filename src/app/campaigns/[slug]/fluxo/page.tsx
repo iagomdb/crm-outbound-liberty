@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { requireUser } from "@/auth/dal";
-import { getCampaignBySlug, getScriptGraph, getScriptOptions } from "@/db/queries";
+import { getCarteiraOu404 } from "@/auth/access";
+import { getScriptGraph, getScriptOptions } from "@/db/queries";
 import { ConfirmButton } from "@/components/ConfirmButton";
 import { FlowCanvas } from "@/components/flow/FlowCanvas";
 import { opcoesSoltas } from "@/core/script-flow";
@@ -18,10 +17,8 @@ export const dynamic = "force-dynamic";
  * que é o que funciona com uma mão no telefone.
  */
 export default async function FluxoPage({ params }: { params: Promise<{ slug: string }> }) {
-  await requireUser();
   const { slug } = await params;
-  const campaign = await getCampaignBySlug(slug);
-  if (!campaign) notFound();
+  const campaign = await getCarteiraOu404(slug);
 
   const [graph, todas] = await Promise.all([getScriptGraph(campaign.id), getScriptOptions(campaign.id)]);
   const soltas = opcoesSoltas(graph, todas);

@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { requireUser } from "@/auth/dal";
-import { getCampaignBySlug, getTriagemQueue } from "@/db/queries";
+import { getAccess, getCarteiraOu404, isAdmin } from "@/auth/access";
+import { getTriagemQueue } from "@/db/queries";
 import { bulkDelete, bulkDeleteAllPending, bulkTriage, triageCompany } from "./actions";
 import { fmtCnpj, fmtMoney } from "@/lib/format";
 import { Button, ButtonLink } from "@/components/ui";
@@ -21,10 +20,9 @@ export default async function TriagemPage({
   params: Promise<{ slug: string }>;
   searchParams: Promise<{ p?: string }>;
 }) {
-  await requireUser();
   const [{ slug }, { p }] = await Promise.all([params, searchParams]);
-  const campaign = await getCampaignBySlug(slug);
-  if (!campaign) notFound();
+  const [campaign, access] = await Promise.all([getCarteiraOu404(slug), getAccess()]);
+  const admin = isAdmin(access);
 
   const pending = await getTriagemQueue(campaign.id);
 
@@ -62,22 +60,27 @@ export default async function TriagemPage({
             <Button type="submit" formAction={bulkTriage.bind(null, slug, false)} variant="secondary" size="sm">
               fora do ICP
             </Button>
-            <ConfirmButton
-              formAction={bulkDelete.bind(null, slug)}
-              message="Apagar da carteira os alvos SELECIONADOS? As empresas continuam cadastradas no CRM. Não tem volta."
-              className="rounded-md border border-red-300 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
-            >
-              apagar da carteira
-            </ConfirmButton>
-            <span className="ml-auto">
-              <ConfirmButton
-                formAction={bulkDeleteAllPending.bind(null, slug)}
-                message={`Apagar TODOS os ${pending.length} pendentes de triagem desta carteira (todas as páginas)? Use pra desfazer uma importação errada. As empresas continuam no CRM. Não tem volta.`}
-                className="rounded-md px-2.5 py-1 text-xs text-red-500 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950"
-              >
-                apagar TODOS os {pending.length} pendentes
-              </ConfirmButton>
-            </span>
+            {/* apagar é do admin (desfaz import, que também é dele) */}
+            {admin && (
+              <>
+                <ConfirmButton
+                  formAction={bulkDelete.bind(null, slug)}
+                  message="Apagar da carteira os alvos SELECIONADOS? As empresas continuam cadastradas no CRM. Não tem volta."
+                  className="rounded-md border border-red-300 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
+                >
+                  apagar da carteira
+                </ConfirmButton>
+                <span className="ml-auto">
+                  <ConfirmButton
+                    formAction={bulkDeleteAllPending.bind(null, slug)}
+                    message={`Apagar TODOS os ${pending.length} pendentes de triagem desta carteira (todas as páginas)? Use pra desfazer uma importação errada. As empresas continuam no CRM. Não tem volta.`}
+                    className="rounded-md px-2.5 py-1 text-xs text-red-500 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950"
+                  >
+                    apagar TODOS os {pending.length} pendentes
+                  </ConfirmButton>
+                </span>
+              </>
+            )}
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">

@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { requireUser } from "@/auth/dal";
+import { getEscopo, requireAdminPage } from "@/auth/access";
 import { getCampaignsWithStats } from "@/db/queries";
-import { getContaAtiva } from "@/lib/conta-server";
 import { ButtonLink, Field, Input, Select } from "@/components/ui";
 import { PendingButton, PendingNote } from "@/components/PendingButton";
 import { IMPORT_FIELDS, analyzeSheet, loadWorkbook, type ImportPreview, type SheetAnalysis } from "@/core/import";
@@ -42,7 +41,7 @@ export default async function MapeamentoPage({
   params: Promise<{ token: string }>;
   searchParams: Promise<{ err?: string; p?: string; m?: string; done?: string }>;
 }) {
-  await requireUser();
+  await requireAdminPage();
   const { token } = await params;
   if (!isValidToken(token)) redirect("/importar");
   const { err, p, m, done } = await searchParams;
@@ -88,7 +87,7 @@ export default async function MapeamentoPage({
     );
   }
 
-  const [meta, camps] = await Promise.all([readMeta(token), getCampaignsWithStats(await getContaAtiva())]);
+  const [meta, camps] = await Promise.all([readMeta(token), getCampaignsWithStats(await getEscopo())]);
   const state = parseJson<MappingState>(m);
   const preview = parseJson<ImportPreview>(p);
 

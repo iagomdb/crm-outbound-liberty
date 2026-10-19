@@ -14,6 +14,8 @@ type Props = {
   archived: boolean;
   stageOptions: Opt[];
   mentalOptions: Opt[];
+  /** apagar da carteira é do admin; o operador arquiva */
+  admin: boolean;
 };
 
 export function TargetSection({
@@ -26,6 +28,7 @@ export function TargetSection({
   archived,
   stageOptions,
   mentalOptions,
+  admin,
 }: Props) {
   return (
     <Card title="Alvo">
@@ -75,23 +78,25 @@ export function TargetSection({
           </form>
         </details>
       )}
-      <details className="mt-2">
-        <summary className="cursor-pointer text-xs text-red-500 hover:underline">apagar da carteira</summary>
-        <div className="mt-2 flex items-center justify-between gap-3">
-          <p className="text-xs text-zinc-500">
-            Some do funil e leva junto TODO o histórico (ligações, reuniões). A empresa continua cadastrada. Pra só
-            tirar de circulação, prefira arquivar.
-          </p>
-          <form action={deleteTarget.bind(null, targetId)}>
-            <ConfirmButton
-              message="Apagar este alvo da carteira com TODO o histórico dele (ligações, reuniões)? Não tem volta."
-              className="whitespace-nowrap rounded-md bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700 dark:hover:bg-red-500"
-            >
-              Apagar alvo
-            </ConfirmButton>
-          </form>
-        </div>
-      </details>
+      {admin && (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-xs text-red-500 hover:underline">apagar da carteira</summary>
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <p className="text-xs text-zinc-500">
+              Some do funil e leva junto TODO o histórico (ligações, reuniões). A empresa continua cadastrada. Pra só
+              tirar de circulação, prefira arquivar.
+            </p>
+            <form action={deleteTarget.bind(null, targetId)}>
+              <ConfirmButton
+                message="Apagar este alvo da carteira com TODO o histórico dele (ligações, reuniões)? Não tem volta."
+                className="whitespace-nowrap rounded-md bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700 dark:hover:bg-red-500"
+              >
+                Apagar alvo
+              </ConfirmButton>
+            </form>
+          </div>
+        </details>
+      )}
     </Card>
   );
 }

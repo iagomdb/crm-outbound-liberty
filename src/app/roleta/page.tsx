@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { requireUser } from "@/auth/dal";
+import { getEscopo } from "@/auth/access";
 import { getRoletaCampaigns, getTodayStats } from "@/db/queries";
-import { getContaAtiva } from "@/lib/conta-server";
 import { Button } from "@/components/ui";
 import { sortear } from "./actions";
 
@@ -13,10 +12,10 @@ export const dynamic = "force-dynamic";
  * segmentos e abordagens diferentes na mesma sessão.
  */
 export default async function RoletaPage({ searchParams }: { searchParams: Promise<{ err?: string }> }) {
-  await requireUser();
   const { err } = await searchParams;
-  const conta = await getContaAtiva();
-  const [camps, hoje] = await Promise.all([getRoletaCampaigns(conta), getTodayStats(conta)]);
+  const escopo = await getEscopo();
+  const { conta } = escopo;
+  const [camps, hoje] = await Promise.all([getRoletaCampaigns(escopo), getTodayStats(escopo)]);
 
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-5">

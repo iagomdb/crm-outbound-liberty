@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { eq, like } from "drizzle-orm";
-import { requireUser } from "@/auth/dal";
+import { assertCarteira, requireAdmin } from "@/auth/access";
 import { getDb } from "@/db";
 import { campaigns } from "@/db/schema";
 import { slugify } from "@/lib/slugify";
@@ -14,9 +14,9 @@ const s = (v: FormDataEntryValue | null) => (typeof v === "string" ? v.trim() : 
 type CampaignStatus = typeof campaigns.$inferInsert.status;
 
 
-/** Cria uma carteira (campanha) nova e leva direto pro board dela. */
+/** Cria uma carteira (campanha) nova e leva direto pro board dela. Só admin. */
 export async function createCampaign(fd: FormData) {
-  await requireUser();
+  await requireAdmin();
   const db = getDb();
   const name = s(fd.get("name"));
   if (!name) throw new Error("nome obrigatório");
@@ -52,7 +52,7 @@ export async function createCampaign(fd: FormData) {
 
 /** Atualiza a carteira. O slug não muda (URLs e histórico continuam válidos). */
 export async function updateCampaign(campaignId: string, fd: FormData) {
-  await requireUser();
+  await assertCarteira(campaignId);
   const db = getDb();
   const name = s(fd.get("name"));
   if (!name) throw new Error("nome obrigatório");
@@ -78,9 +78,9 @@ export async function updateCampaign(campaignId: string, fd: FormData) {
   redirect(`/campaigns/${c.slug}`);
 }
 
-/** Apaga a carteira e, em cascata, alvos/ligações/reuniões dela. Empresas (globais) ficam. */
+/** Apaga a carteira e, em cascata, alvos/ligações/reuniões dela. Empresas (globais) ficam. Só admin. */
 export async function deleteCampaign(campaignId: string) {
-  await requireUser();
+  await requireAdmin();
   const db = getDb();
   await db.delete(campaigns).where(eq(campaigns.id, campaignId));
   revalidatePath("/", "layout");

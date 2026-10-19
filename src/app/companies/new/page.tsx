@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { requireUser } from "@/auth/dal";
+import { getEscopo, requireAdminPage } from "@/auth/access";
 import { getCampaignsWithStats } from "@/db/queries";
-import { getContaAtiva } from "@/lib/conta-server";
 import { MaskedInput } from "@/components/MaskedInput";
 import { Button, Field, Input, Select, fieldClasses } from "@/components/ui";
 import { createCompany } from "../actions";
@@ -13,9 +12,9 @@ export default async function NewCompanyPage({
 }: {
   searchParams: Promise<{ campaign?: string }>;
 }) {
-  await requireUser();
+  await requireAdminPage();
   const { campaign } = await searchParams;
-  const camps = await getCampaignsWithStats(await getContaAtiva());
+  const camps = await getCampaignsWithStats(await getEscopo());
 
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-5">

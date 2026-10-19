@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireUser } from "@/auth/dal";
+import { requireAdminPage } from "@/auth/access";
 import { Button, Field, Input, Select, Textarea } from "@/components/ui";
 import { ChecklistEditor } from "@/components/ChecklistEditor";
 import { getContas } from "@/db/queries";
@@ -9,8 +9,8 @@ import { createCampaign } from "../actions";
 export const dynamic = "force-dynamic";
 
 export default async function NewCampaignPage() {
-  await requireUser();
-  const [contas, contaAtiva] = await Promise.all([getContas(), getContaAtiva()]);
+  await requireAdminPage();
+  const [contas, contaAtiva] = await Promise.all([getContas(null), getContaAtiva()]);
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-5">

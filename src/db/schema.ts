@@ -13,7 +13,9 @@
  *   targets    → empresa ↔ campanha = o registro de pipeline (estágio, cadência, pretexto novo)
  *   activities → cada ligação/tentativa (reached_human, stalled_at, objeção, objetivo batido)
  *   meetings   → vitória #1 (casos separados, handoff pro escritório)
- *   users      → operador do CRM (login/senha — módulo em src/auth)
+ *   users      → operador do CRM (login/senha — módulo em src/auth). `role`: admin
+ *                vê e gerencia tudo; operador só as carteiras liberadas pra ele
+ *   campaign_members → quais carteiras cada operador enxerga (o compartilhamento)
  *   sessions   → sessões de login (cookie guarda o token; o banco só o hash dele)
  */
 import { relations, sql } from "drizzle-orm";
@@ -98,6 +100,13 @@ export const faixaClientes = pgEnum("faixa_clientes", ["ate_50", "de_51_200", "d
 
 /** Porte percebido na conversa (não precisa ser preciso — é pra análise). */
 export const portePercebido = pgEnum("porte_percebido", ["micro", "pequena", "media", "grande"]);
+
+/**
+ * Papel no CRM. admin = dono: vê todas as carteiras, gerencia usuários, cria e
+ * apaga carteira, importa, exclui. operador = só as carteiras liberadas pra ele
+ * (campaign_members) — liga, tria, arquiva e edita o script delas.
+ */
+export const userRole = pgEnum("user_role", ["admin", "operador"]);
 
 export const meetingStatus = pgEnum("meeting_status", [
   "agendada",
@@ -401,6 +410,8 @@ export const activities = pgTable(
       .notNull()
       .references(() => targets.id, { onDelete: "cascade" }),
     contactId: uuid().references(() => contacts.id, { onDelete: "set null" }), // com quem falou
+    // QUEM registrou (ligou/mandou o e-mail). null = usuário apagado depois
+    userId: uuid().references((): AnyPgColumn => users.id, { onDelete: "set null" }),
     type: activityType().notNull().default("ligacao"),
     occurredAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     reachedHuman: boolean().notNull().default(false), // conta conversa, NÃO discada
@@ -427,6 +438,7 @@ export const activities = pgTable(
   (t) => [
     index("activities_target_idx").on(t.targetId, t.occurredAt),
     index("activities_occurred_idx").on(t.occurredAt),
+    index("activities_user_idx").on(t.userId, t.occurredAt),
   ],
 );
 
@@ -455,9 +467,32 @@ export const users = pgTable("users", {
   email: text().notNull().unique(), // sempre minúsculo (normalizado no cadastro e no login)
   name: text().notNull(),
   passwordHash: text().notNull(), // scrypt — formato autodescritivo (src/auth/password.ts)
+  role: userRole().notNull().default("operador"), // nasce operador: admin é promoção explícita
   active: boolean().notNull().default(true), // false = bloqueia login sem apagar o usuário
   ...timestamps,
 });
+
+// ---------------------------------------------------------------- campaign_members (compartilhamento)
+// Carteira ↔ operador: o que ele enxerga. Admin não precisa de linha aqui — vê
+// tudo. Tirar a linha corta o acesso na próxima request (o escopo é lido do
+// banco a cada render, não fica na sessão).
+export const campaignMembers = pgTable(
+  "campaign_members",
+  {
+    id: uuid().defaultRandom().primaryKey(),
+    campaignId: uuid()
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("campaign_members_uidx").on(t.campaignId, t.userId),
+    index("campaign_members_user_idx").on(t.userId),
+  ],
+);
 
 export const sessions = pgTable(
   "sessions",
@@ -476,6 +511,7 @@ export const sessions = pgTable(
 // ---------------------------------------------------------------- relations (query API)
 export const campaignsRelations = relations(campaigns, ({ many }) => ({
   targets: many(targets),
+  members: many(campaignMembers),
   checklistItems: many(checklistItems),
   scriptNodes: many(scriptNodes),
   scriptGroups: many(scriptGroups),
@@ -528,6 +564,7 @@ export const targetsRelations = relations(targets, ({ one, many }) => ({
 export const activitiesRelations = relations(activities, ({ one }) => ({
   target: one(targets, { fields: [activities.targetId], references: [targets.id] }),
   contact: one(contacts, { fields: [activities.contactId], references: [contacts.id] }),
+  user: one(users, { fields: [activities.userId], references: [users.id] }),
 }));
 
 export const meetingsRelations = relations(meetings, ({ one }) => ({
@@ -537,6 +574,13 @@ export const meetingsRelations = relations(meetings, ({ one }) => ({
 
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
+  carteiras: many(campaignMembers),
+  activities: many(activities),
+}));
+
+export const campaignMembersRelations = relations(campaignMembers, ({ one }) => ({
+  campaign: one(campaigns, { fields: [campaignMembers.campaignId], references: [campaigns.id] }),
+  user: one(users, { fields: [campaignMembers.userId], references: [users.id] }),
 }));
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({

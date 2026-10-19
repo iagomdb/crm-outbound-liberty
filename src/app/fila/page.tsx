@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { requireUser } from "@/auth/dal";
+import { getEscopo } from "@/auth/access";
 import { getDailyQueue, getOrphans, getTodayStats, type FilaItem } from "@/db/queries";
-import { getContaAtiva } from "@/lib/conta-server";
 import { deathFor, deathLabel, DEATH_CLASSES } from "@/core/death";
 import { STAGE_LABELS } from "@/core/pipeline";
 import { goldenHourLabel } from "@/core/golden-hours";
@@ -77,9 +76,9 @@ function Section({ title, cls, items, hintFor }: { title: string; cls: string; i
 }
 
 export default async function FilaPage() {
-  await requireUser();
-  const conta = await getContaAtiva();
-  const [q, stats, orphans] = await Promise.all([getDailyQueue(conta), getTodayStats(conta), getOrphans(conta)]);
+  const escopo = await getEscopo();
+  const { conta } = escopo;
+  const [q, stats, orphans] = await Promise.all([getDailyQueue(escopo), getTodayStats(escopo), getOrphans(escopo)]);
   const gh = GH_UI[goldenHourLabel()];
   const total = q.atrasadas.length + q.hoje.length + q.estadoZero.length;
   const first = [...q.atrasadas, ...q.hoje, ...q.estadoZero][0];

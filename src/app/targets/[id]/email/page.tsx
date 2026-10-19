@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireUser } from "@/auth/dal";
+import { getAccess, podeVerCarteira } from "@/auth/access";
 import { getEmailTemplates, getTargetDetail } from "@/db/queries";
 import { EmailComposer } from "@/components/EmailComposer";
 import { fillTemplate } from "@/email/send";
@@ -17,10 +17,10 @@ export default async function EmailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ back?: string }>;
 }) {
-  await requireUser();
+  const access = await getAccess();
   const [{ id }, { back }] = await Promise.all([params, searchParams]);
   const [t, rawTemplates] = await Promise.all([getTargetDetail(id), getEmailTemplates()]);
-  if (!t) notFound();
+  if (!t || !podeVerCarteira(access, t.campaignId)) notFound();
 
   const co = t.company;
   const empresa = co.nomeFantasia || co.razaoSocial;

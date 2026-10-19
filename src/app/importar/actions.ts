@@ -5,7 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { eq, like } from "drizzle-orm";
-import { requireUser } from "@/auth/dal";
+import { requireAdmin } from "@/auth/access";
 import { getDb } from "@/db";
 import { campaigns } from "@/db/schema";
 import { slugify } from "@/lib/slugify";
@@ -29,7 +29,7 @@ const s = (v: FormDataEntryValue | null) => (typeof v === "string" ? v.trim() : 
 
 /** Passo 1: recebe um ou mais .xlsx (mesma estrutura), guarda no tmp e vai pra tela de mapeamento. */
 export async function uploadSheet(fd: FormData) {
-  await requireUser();
+  await requireAdmin();
 
   const files = fd.getAll("file").filter((f): f is File => f instanceof File && f.size > 0);
   if (!files.length) redirect(`/importar?err=${encodeURIComponent("escolha pelo menos um arquivo")}`);
@@ -64,7 +64,7 @@ function back(token: string, params: Record<string, string>): never {
 
 /** Passo 2: simula (dryRun) ou executa o import — todos os arquivos do upload, mapeados pelo 1º. */
 export async function runImport(token: string, dryRun: boolean, fd: FormData) {
-  await requireUser();
+  await requireAdmin();
   if (!isValidToken(token)) redirect("/importar");
 
   // reconstrói o mapeamento coluna → campo a partir dos selects

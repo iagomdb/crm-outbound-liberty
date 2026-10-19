@@ -12,6 +12,7 @@ import {
   scriptGroups,
   scriptNodes,
   targets,
+  users,
 } from "./schema";
 import type { IcpRawCall, IcpRawMeeting, IcpRawTarget } from "@/core/icp-stats";
 import { type Stage, TERMINAL_STAGES } from "@/core/pipeline";
@@ -29,51 +30,74 @@ export type CampaignStats = {
   byStage: Record<string, number>;
 };
 
-// ---------------------------------------------------------------- conta (agrupador acima da carteira)
+// ---------------------------------------------------------------- escopo (conta + permissão)
 
 /**
- * Filtro de conta pra queries que JÁ fazem join com `campaigns`.
- * null (= todas as contas) devolve undefined: drizzle ignora no and()/where().
+ * O recorte de toda listagem, montado por getEscopo() (src/auth/access.ts):
+ *   conta       → filtro de VISÃO escolhido no topo (null = todas as contas)
+ *   campaignIds → PERMISSÃO: carteiras que o usuário pode ver (null = admin, todas)
+ * Listagem recebe o escopo inteiro, nunca a conta solta — é o que impede o
+ * operador de ver carteira alheia escolhendo "Todas as contas".
  */
-const byConta = (conta: string | null) => (conta ? eq(campaigns.conta, conta) : undefined);
+export type Escopo = { conta: string | null; campaignIds: string[] | null };
+
+/**
+ * Filtro de escopo pra queries que JÁ fazem join com `campaigns`. Sem
+ * restrição nenhuma devolve undefined: drizzle ignora no and()/where().
+ */
+const byEscopo = (e: Escopo) =>
+  and(
+    e.conta ? eq(campaigns.conta, e.conta) : undefined,
+    e.campaignIds ? inArray(campaigns.id, e.campaignIds) : undefined,
+  );
 
 /**
  * Mesmo filtro pra queries que só tocam `targets` (sem join com campaigns):
- * restringe às carteiras da conta via subquery.
+ * a conta vira subquery; a permissão filtra direto pelo campaignId.
  */
-function targetsDaConta(conta: string | null) {
-  if (!conta) return undefined;
-  return inArray(
-    targets.campaignId,
-    getDb().select({ id: campaigns.id }).from(campaigns).where(eq(campaigns.conta, conta)),
+const targetsNoEscopo = (e: Escopo) =>
+  and(
+    e.conta
+      ? inArray(targets.campaignId, getDb().select({ id: campaigns.id }).from(campaigns).where(eq(campaigns.conta, e.conta)))
+      : undefined,
+    e.campaignIds ? inArray(targets.campaignId, e.campaignIds) : undefined,
   );
-}
 
-/** Contas cadastradas nas carteiras (alimenta o seletor do header). */
-export async function getContas(): Promise<string[]> {
+/** Contas das carteiras que o usuário vê (alimenta o seletor do header). */
+export async function getContas(campaignIds: string[] | null): Promise<string[]> {
   const db = getDb();
   const rows = await db
     .selectDistinct({ conta: campaigns.conta })
     .from(campaigns)
-    .where(sql`nullif(trim(${campaigns.conta}), '') is not null`)
+    .where(
+      and(
+        sql`nullif(trim(${campaigns.conta}), '') is not null`,
+        campaignIds ? inArray(campaigns.id, campaignIds) : undefined,
+      ),
+    )
     .orderBy(asc(campaigns.conta));
   return rows.map((r) => r.conta!).filter(Boolean);
 }
 
 /** Quantas carteiras ainda estão sem conta — elas somem quando há filtro ativo. */
-export async function countCarteirasSemConta(): Promise<number> {
+export async function countCarteirasSemConta(campaignIds: string[] | null): Promise<number> {
   const db = getDb();
   const [r] = await db
     .select({ n: count() })
     .from(campaigns)
-    .where(sql`nullif(trim(${campaigns.conta}), '') is null`);
+    .where(
+      and(
+        sql`nullif(trim(${campaigns.conta}), '') is null`,
+        campaignIds ? inArray(campaigns.id, campaignIds) : undefined,
+      ),
+    );
   return r?.n ?? 0;
 }
 
 /** Campanhas + contagem de alvos por estágio (pro overview). */
-export async function getCampaignsWithStats(conta: string | null = null): Promise<CampaignStats[]> {
+export async function getCampaignsWithStats(escopo: Escopo): Promise<CampaignStats[]> {
   const db = getDb();
-  const camps = await db.select().from(campaigns).where(byConta(conta)).orderBy(asc(campaigns.createdAt));
+  const camps = await db.select().from(campaigns).where(byEscopo(escopo)).orderBy(asc(campaigns.createdAt));
   const rows = await db
     .select({ campaignId: targets.campaignId, stage: targets.stage, n: count() })
     .from(targets)
@@ -100,7 +124,7 @@ export async function getCampaignBySlug(slug: string) {
 // ---------------------------------------------------------------- estatísticas de ICP
 
 /** Linhas cruas pro dashboard de ICP (o cálculo fica em core/icp-stats.ts). */
-export async function getIcpRawData(conta: string | null = null): Promise<{
+export async function getIcpRawData(escopo: Escopo): Promise<{
   camps: { id: string; name: string; slug: string | null; status: string }[];
   rawTargets: IcpRawTarget[];
   rawCalls: IcpRawCall[];
@@ -111,7 +135,7 @@ export async function getIcpRawData(conta: string | null = null): Promise<{
   const camps = await db
     .select({ id: campaigns.id, name: campaigns.name, slug: campaigns.slug, status: campaigns.status })
     .from(campaigns)
-    .where(byConta(conta))
+    .where(byEscopo(escopo))
     .orderBy(asc(campaigns.createdAt));
 
   const rawTargets: IcpRawTarget[] = await db
@@ -123,7 +147,7 @@ export async function getIcpRawData(conta: string | null = null): Promise<{
     })
     .from(targets)
     .innerJoin(companies, eq(targets.companyId, companies.id))
-    .where(targetsDaConta(conta));
+    .where(targetsNoEscopo(escopo));
 
   const callRows = await db
     .select({
@@ -141,7 +165,7 @@ export async function getIcpRawData(conta: string | null = null): Promise<{
     .from(activities)
     .innerJoin(targets, eq(activities.targetId, targets.id))
     .leftJoin(contacts, eq(activities.contactId, contacts.id))
-    .where(and(eq(activities.type, "ligacao"), targetsDaConta(conta)));
+    .where(and(eq(activities.type, "ligacao"), targetsNoEscopo(escopo)));
 
   const rawCalls: IcpRawCall[] = callRows.map((r) => ({
     targetId: r.targetId,
@@ -160,7 +184,7 @@ export async function getIcpRawData(conta: string | null = null): Promise<{
     .select({ campaignId: targets.campaignId, targetId: meetings.targetId })
     .from(meetings)
     .innerJoin(targets, eq(meetings.targetId, targets.id))
-    .where(targetsDaConta(conta));
+    .where(targetsNoEscopo(escopo));
 
   return { camps, rawTargets, rawCalls, rawMeetings };
 }
@@ -265,7 +289,7 @@ const ROLETA_STAGES: Stage[] = ["novo", "fit"];
 export type RoletaCampaign = { id: string; name: string; slug: string | null; disponiveis: number };
 
 /** Carteiras ativas + quantos alvos "novo"/"fit" cada uma tem disponíveis pro sorteio. */
-export async function getRoletaCampaigns(conta: string | null = null): Promise<RoletaCampaign[]> {
+export async function getRoletaCampaigns(escopo: Escopo): Promise<RoletaCampaign[]> {
   const db = getDb();
   return db
     .select({ id: campaigns.id, name: campaigns.name, slug: campaigns.slug, disponiveis: count(targets.id) })
@@ -274,16 +298,26 @@ export async function getRoletaCampaigns(conta: string | null = null): Promise<R
       targets,
       and(eq(targets.campaignId, campaigns.id), isNull(targets.archivedAt), inArray(targets.stage, ROLETA_STAGES)),
     )
-    .where(and(eq(campaigns.status, "ativa"), byConta(conta)))
+    .where(and(eq(campaigns.status, "ativa"), byEscopo(escopo)))
     .groupBy(campaigns.id)
     .orderBy(asc(campaigns.createdAt));
 }
 
-/** Sorteia um alvo "novo"/"fit" dentro das carteiras selecionadas (slugs). */
-export async function getRandomRoletaTarget(slugs: string[], excludeId?: string): Promise<string | null> {
+/**
+ * Sorteia um alvo "novo"/"fit" dentro das carteiras selecionadas (slugs). Os
+ * slugs vêm do browser: `campaignIds` (a permissão do usuário) é quem barra
+ * slug de carteira alheia. Só a permissão, não a conta: trocar de conta no
+ * meio da roleta não pode secar o sorteio das carteiras já marcadas.
+ */
+export async function getRandomRoletaTarget(
+  slugs: string[],
+  campaignIds: string[] | null,
+  excludeId?: string,
+): Promise<string | null> {
   if (!slugs.length) return null;
   const db = getDb();
   const conds = [isNull(targets.archivedAt), inArray(targets.stage, ROLETA_STAGES), inArray(campaigns.slug, slugs)];
+  if (campaignIds) conds.push(inArray(campaigns.id, campaignIds));
   if (excludeId) conds.push(not(eq(targets.id, excludeId)));
   const [row] = await db
     .select({ id: targets.id })
@@ -314,11 +348,11 @@ export async function getQueue(campaignId: string) {
 }
 
 /** Agenda: todos os retornos agendados (nextActionAt) de leads ativos, por data. */
-export async function getAgenda(conta: string | null = null) {
+export async function getAgenda(escopo: Escopo) {
   const db = getDb();
   return db.query.targets.findMany({
     where: (t, { and, isNotNull, isNull }) =>
-      and(isNotNull(t.nextActionAt), isNull(t.archivedAt), targetsDaConta(conta)),
+      and(isNotNull(t.nextActionAt), isNull(t.archivedAt), targetsNoEscopo(escopo)),
     with: { company: true, campaign: true },
     orderBy: (t, { asc }) => [asc(t.nextActionAt)],
     limit: 300,
@@ -349,7 +383,7 @@ export async function getTargetDetail(id: string) {
       },
       activities: {
         orderBy: (a, { desc }) => [desc(a.occurredAt)],
-        with: { contact: true },
+        with: { contact: true, user: { columns: { id: true, name: true } } },
         limit: 50,
       },
       meetings: {
@@ -422,7 +456,7 @@ const activeTarget = and(isNull(targets.archivedAt), notInArray(targets.stage, C
  * A Fila do Dia: atrasadas → hoje → estado zero (novos triados como fit, a
  * "task implícita" da primeira ligação). Desce de cima pra baixo e liga.
  */
-export async function getDailyQueue(conta: string | null = null, now = new Date()) {
+export async function getDailyQueue(escopo: Escopo, now = new Date()) {
   const db = getDb();
   const startToday = new Date(now);
   startToday.setHours(0, 0, 0, 0);
@@ -434,7 +468,7 @@ export async function getDailyQueue(conta: string | null = null, now = new Date(
     .from(targets)
     .innerJoin(companies, eq(targets.companyId, companies.id))
     .innerJoin(campaigns, eq(targets.campaignId, campaigns.id))
-    .where(and(isNull(targets.archivedAt), lt(targets.nextActionAt, startTomorrow), byConta(conta)))
+    .where(and(isNull(targets.archivedAt), lt(targets.nextActionAt, startTomorrow), byEscopo(escopo)))
     // desempate obrigatório: o cursor de "próxima" é por POSIÇÃO, e nextActionAt
     // empata o tempo todo (a escada 7/14 joga todo mundo pras 9h). Sem critério
     // estável o Postgres devolveria ordens diferentes a cada request.
@@ -453,7 +487,7 @@ export async function getDailyQueue(conta: string | null = null, now = new Date(
         eq(targets.stage, "fit"),
         eq(targets.attempts, 0),
         isNull(targets.nextActionAt),
-        byConta(conta),
+        byEscopo(escopo),
       ),
     )
     .orderBy(desc(targets.priority), asc(targets.createdAt), asc(targets.id))
@@ -479,8 +513,8 @@ export async function getDailyQueue(conta: string | null = null, now = new Date(
  * fallback: o topo, excluindo ele mesmo. Por isso o registro de ligação
  * calcula a próxima ANTES de gravar, enquanto o alvo ainda tem posição.
  */
-export async function getNextInQueue(currentTargetId: string, conta: string | null = null): Promise<string | null> {
-  const q = await getDailyQueue(conta);
+export async function getNextInQueue(currentTargetId: string, escopo: Escopo): Promise<string | null> {
+  const q = await getDailyQueue(escopo);
   const list = [...q.atrasadas, ...q.hoje, ...q.estadoZero];
   const i = list.findIndex((t) => t.id === currentTargetId);
   if (i === -1) return list.find((t) => t.id !== currentTargetId)?.id ?? null;
@@ -492,7 +526,7 @@ export async function getNextInQueue(currentTargetId: string, conta: string | nu
  * terminal — não deveria existir depois da regra de ouro. Estado zero
  * (novo, 0 tentativas) não é órfão: ainda nem entrou no ciclo.
  */
-export async function getOrphans(conta: string | null = null) {
+export async function getOrphans(escopo: Escopo) {
   const db = getDb();
   return db
     .select(filaRow)
@@ -502,7 +536,7 @@ export async function getOrphans(conta: string | null = null) {
     .where(
       and(
         activeTarget,
-        byConta(conta),
+        byEscopo(escopo),
         isNull(targets.nextActionAt),
         // pré-ciclo (novo/fit sem tentativa) não é órfão: ainda nem entrou no ciclo
         not(and(inArray(targets.stage, ["novo", "fit"]), eq(targets.attempts, 0))!),
@@ -512,7 +546,7 @@ export async function getOrphans(conta: string | null = null) {
 }
 
 /** Medição do dia (roadmap Fase 5): discadas / conversas / reuniões de HOJE. */
-export async function getTodayStats(conta: string | null = null) {
+export async function getTodayStats(escopo: Escopo) {
   const db = getDb();
   const today = sql`date_trunc('day', now())`;
   const [a] = await db
@@ -522,13 +556,40 @@ export async function getTodayStats(conta: string | null = null) {
     })
     .from(activities)
     .innerJoin(targets, eq(activities.targetId, targets.id))
-    .where(and(sql`${activities.occurredAt} >= ${today}`, targetsDaConta(conta)));
+    .where(and(sql`${activities.occurredAt} >= ${today}`, targetsNoEscopo(escopo)));
   const [m] = await db
     .select({ reunioes: sql<number>`(count(*))::int` })
     .from(meetings)
     .innerJoin(targets, eq(meetings.targetId, targets.id))
-    .where(and(sql`${meetings.createdAt} >= ${today}`, targetsDaConta(conta)));
+    .where(and(sql`${meetings.createdAt} >= ${today}`, targetsNoEscopo(escopo)));
   return { discadas: a?.discadas ?? 0, conversas: a?.conversas ?? 0, reunioes: m?.reunioes ?? 0 };
+}
+
+/**
+ * Quem está ligando na carteira: discadas/conversas/reuniões por pessoa, hoje
+ * e no total. Reunião conta pra quem registrou a ligação que a marcou.
+ */
+export async function getStatsPorPessoa(campaignId: string) {
+  const db = getDb();
+  const hoje = sql`date_trunc('day', now())`;
+  const discada = sql`${activities.type} in ('ligacao','voicemail')`;
+  return db
+    .select({
+      userId: activities.userId,
+      nome: users.name,
+      discadas: sql<number>`(count(*) filter (where ${discada}))::int`,
+      conversas: sql<number>`(count(*) filter (where ${activities.reachedHuman}))::int`,
+      reunioes: sql<number>`(count(*) filter (where ${activities.objectiveHit} = 'reuniao'))::int`,
+      discadasHoje: sql<number>`(count(*) filter (where ${discada} and ${activities.occurredAt} >= ${hoje}))::int`,
+      conversasHoje: sql<number>`(count(*) filter (where ${activities.reachedHuman} and ${activities.occurredAt} >= ${hoje}))::int`,
+      ultima: sql<Date | null>`max(${activities.occurredAt})`,
+    })
+    .from(activities)
+    .innerJoin(targets, eq(activities.targetId, targets.id))
+    .leftJoin(users, eq(activities.userId, users.id))
+    .where(eq(targets.campaignId, campaignId))
+    .groupBy(activities.userId, users.name)
+    .orderBy(desc(sql`max(${activities.occurredAt})`));
 }
 
 // ---------------------------------------------------------------- triagem de ICP (roadmap Fase 1)

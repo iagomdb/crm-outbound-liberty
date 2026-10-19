@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { requireUser } from "@/auth/dal";
+import { getAccess } from "@/auth/access";
 import { getDb } from "@/db";
-import { asc } from "drizzle-orm";
+import { asc, inArray } from "drizzle-orm";
 import { campaigns } from "@/db/schema";
 import { Badge, Select } from "@/components/ui";
 import { ConfirmButton } from "@/components/ConfirmButton";
@@ -10,12 +10,19 @@ import { duplicarHipotese } from "./actions";
 export const dynamic = "force-dynamic";
 
 export default async function HipotesesPage({ searchParams }: { searchParams: Promise<{ ok?: string; err?: string }> }) {
-  await requireUser();
+  const { campaignIds } = await getAccess();
   const { ok, err } = await searchParams;
   const db = getDb();
 
-  const camps = await db.select().from(campaigns).orderBy(asc(campaigns.createdAt));
-  const items = await db.query.checklistItems.findMany({ with: { opcoes: true } });
+  const camps = await db
+    .select()
+    .from(campaigns)
+    .where(campaignIds ? inArray(campaigns.id, campaignIds) : undefined)
+    .orderBy(asc(campaigns.createdAt));
+  const items = await db.query.checklistItems.findMany({
+    where: (c, { inArray }) => (campaignIds ? inArray(c.campaignId, campaignIds) : undefined),
+    with: { opcoes: true },
+  });
 
   const resumo = (campaignId: string) => {
     const mine = items.filter((i) => i.campaignId === campaignId);
